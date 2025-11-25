@@ -298,7 +298,7 @@ if (fs.existsSync(distPath)) {
 // --- START SERVER ---
 const startServer = async () => {
     app.listen(PORT, '0.0.0.0', () => {
-        console.log(`[Boot] Server running on http://0.0.0.0:${PORT}`);
+        console.log(`[Boot] Server running new server  on http://0.0.0.0:${PORT}`);
     });
     initDb().then(() => console.log("[Boot] DB Ready")).catch(e => console.error("[Boot] DB Fail", e));
 };
