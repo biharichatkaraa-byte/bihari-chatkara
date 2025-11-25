@@ -1,0 +1,115 @@
+
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+    <meta name="theme-color" content="#1e293b" />
+    <meta name="description" content="Restaurant Management System for Bihari Chatkara" />
+    <title>Bihari Chatkara</title>
+    <link rel="manifest" href="/manifest.json" />
+    <link rel="apple-touch-icon" href="https://cdn-icons-png.flaticon.com/512/3448/3448609.png">
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Playfair+Display:wght@400;700;900&display=swap" rel="stylesheet">
+    <style>
+      body {
+        font-family: 'Inter', sans-serif;
+        background-color: #f3f4f6;
+        overscroll-behavior-y: none; /* Prevents pull-to-refresh on mobile */
+      }
+      /* Custom scrollbar for KDS/POS panels */
+      .no-scrollbar::-webkit-scrollbar {
+        display: none;
+      }
+      .no-scrollbar {
+        -ms-overflow-style: none;
+        scrollbar-width: none;
+      }
+      .font-serif {
+        font-family: 'Playfair Display', serif;
+      }
+      @keyframes flash-red {
+        0%, 100% { background-color: #fef2f2; border-color: #ef4444; box-shadow: 0 0 0 0 rgba(239, 68, 68, 0); }
+        50% { background-color: #fee2e2; border-color: #b91c1c; box-shadow: 0 0 0 4px rgba(239, 68, 68, 0.2); }
+      }
+      .animate-flash-red {
+        animation: flash-red 1s 5;
+      }
+
+      /* Production Print Styles for Thermal Receipts */
+      @media print {
+        @page {
+          margin: 0;
+          size: auto;
+        }
+        body, html {
+          background-color: white !important;
+          height: 100%;
+          width: 100%;
+          overflow: hidden;
+        }
+        body * {
+          visibility: hidden;
+          height: 0;
+        }
+        #printable-receipt, #printable-receipt * {
+          visibility: visible;
+          height: auto;
+        }
+        #printable-receipt {
+          position: fixed;
+          left: 0;
+          top: 0;
+          width: 100% !important; /* Forces modal content to take full width of paper */
+          max-width: 80mm; /* Standard thermal width approx */
+          margin: 0;
+          padding: 10px;
+          box-shadow: none !important;
+          border: none !important;
+          background: white !important;
+          color: black !important;
+          font-family: 'Courier New', Courier, monospace; /* Monospace aligns prices better */
+        }
+        .print-hidden {
+          display: none !important;
+        }
+        /* Improve contrast for thermal printing */
+        .text-slate-500, .text-slate-400, .text-slate-600 {
+          color: black !important;
+        }
+        .bg-slate-900 {
+          background: none !important;
+          color: black !important;
+          border: 1px solid black;
+        }
+      }
+    </style>
+  <script type="importmap">
+{
+  "imports": {
+    "react/": "https://aistudiocdn.com/react@^19.2.0/",
+    "react": "https://aistudiocdn.com/react@^19.2.0",
+    "react-dom/": "https://aistudiocdn.com/react-dom@^19.2.0/",
+    "@google/genai": "https://aistudiocdn.com/@google/genai@^1.30.0",
+    "lucide-react": "https://aistudiocdn.com/lucide-react@^0.554.0",
+    "vite": "https://aistudiocdn.com/vite@^7.2.4",
+    "@vitejs/plugin-react": "https://aistudiocdn.com/@vitejs/plugin-react@^5.1.1",
+    "recharts": "https://aistudiocdn.com/recharts@^3.5.0",
+    "date-fns": "https://aistudiocdn.com/date-fns@^4.1.0",
+    "express": "https://aistudiocdn.com/express@^5.1.0",
+    "fs": "https://aistudiocdn.com/fs@^0.0.1-security",
+    "mysql2/": "https://aistudiocdn.com/mysql2@^3.15.3/",
+    "path": "https://aistudiocdn.com/path@^0.12.7",
+    "url": "https://aistudiocdn.com/url@^0.11.4",
+    "cors": "https://aistudiocdn.com/cors@^2.8.5",
+    "better-sqlite3": "https://aistudiocdn.com/better-sqlite3@^12.4.6",
+    "dotenv/": "https://aistudiocdn.com/dotenv@^17.2.3/"
+  }
+}
+</script>
+</head>
+  <body>
+    <div id="root"></div>
+    <script type="module" src="/index.tsx"></script>
+  </body>
+</html>

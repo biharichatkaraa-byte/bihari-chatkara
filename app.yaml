@@ -1,0 +1,18 @@
+runtime: nodejs18
+
+instance_class: F1
+
+automatic_scaling:
+  max_instances: 1
+  min_instances: 0
+
+env_variables:
+  NODE_ENV: "production"
+  DB_HOST: "34.131.187.182"
+  DB_USER: "root"
+  DB_PASSWORD: ""
+  DB_NAME: "chatkara"
+  DB_PORT: "3306"
+
+# Handlers are optional for Node.js on App Engine Standard when using 'npm start'
+# We remove the previous invalid script entry to ensure successful deployment.

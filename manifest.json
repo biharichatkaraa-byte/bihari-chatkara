@@ -1,0 +1,22 @@
+
+{
+  "name": "Bihari Chatkara RMS",
+  "short_name": "RMS",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#1e293b",
+  "theme_color": "#ea580c",
+  "orientation": "landscape",
+  "icons": [
+    {
+      "src": "https://cdn-icons-png.flaticon.com/512/3448/3448609.png",
+      "sizes": "192x192",
+      "type": "image/png"
+    },
+    {
+      "src": "https://cdn-icons-png.flaticon.com/512/3448/3448609.png",
+      "sizes": "512x512",
+      "type": "image/png"
+    }
+  ]
+}
