@@ -11,20 +11,44 @@ const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 const PORT = process.env.PORT || 8080;
 
-// MySQL Connection Config
-const DB_CONFIG = {
-    host: process.env.DB_HOST || '34.131.187.182',
-    user: process.env.DB_USER || 'root',
-    password: process.env.DB_PASSWORD || '', 
-    database: process.env.DB_NAME || 'chatkara',
-    port: process.env.DB_PORT ? parseInt(process.env.DB_PORT) : 3306,
-    waitForConnections: true,
-    connectionLimit: 10,
-    queueLimit: 0,
-    enableKeepAlive: true,
-    keepAliveInitialDelay: 0,
-    connectTimeout: 10000 
+// Database Connection Logic
+// Prioritize Unix Socket if available (Common in Cloud Run / App Engine)
+const getDbConfig = () => {
+    const config = {
+        user: process.env.DB_USER || 'root',
+        password: process.env.DB_PASSWORD || '', 
+        database: process.env.DB_NAME || 'chatkara',
+        waitForConnections: true,
+        connectionLimit: 10,
+        queueLimit: 0,
+        enableKeepAlive: true,
+        keepAliveInitialDelay: 0,
+        connectTimeout: 10000 
+    };
+
+    // If INSTANCE_CONNECTION_NAME is provided (Standard GCP Env Variable), use socket
+    // Value example: "gen-lang-client-0461973854:asia-south2:bihari-chatkara"
+    if (process.env.INSTANCE_CONNECTION_NAME) {
+        config.socketPath = `/cloudsql/${process.env.INSTANCE_CONNECTION_NAME}`;
+        console.log(`[DB Config] Using Cloud SQL Socket: ${config.socketPath}`);
+    } 
+    // Fallback: Check if DB_HOST looks like a socket path or connection name
+    else if (process.env.DB_HOST && process.env.DB_HOST.includes(':') && !process.env.DB_HOST.includes('.')) {
+         // This handles case where user puts connection name in DB_HOST
+         config.socketPath = `/cloudsql/${process.env.DB_HOST}`;
+         console.log(`[DB Config] Inferred Socket from DB_HOST: ${config.socketPath}`);
+    }
+    // Fallback: Standard TCP
+    else {
+        config.host = process.env.DB_HOST || '34.131.187.182';
+        config.port = process.env.DB_PORT ? parseInt(process.env.DB_PORT) : 3306;
+        console.log(`[DB Config] Using TCP Host: ${config.host}:${config.port}`);
+    }
+
+    return config;
 };
+
+const DB_CONFIG = getDbConfig();
 
 // --- SEED DATA ---
 const SEED_INGREDIENTS = [
@@ -63,18 +87,19 @@ const SEED_MENU_ITEMS = [
 // --- APP INITIALIZATION ---
 const app = express();
 let pool = null;
+let dbError = null;
 
 // --- DATABASE INITIALIZATION ---
 const initDb = async () => {
     try {
-        console.log(`[DB] Attempting connection to MySQL at ${DB_CONFIG.host}...`);
+        console.log(`[DB] Attempting connection...`);
         pool = mysql.createPool(DB_CONFIG);
         
         // Test connection
         const connection = await pool.getConnection();
         console.log(`[DB] MySQL Connected Successfully to '${DB_CONFIG.database}'.`);
         
-        // Initialize Schema (Simplified for brevity, same tables as before)
+        // Initialize Schema
         await connection.query(`CREATE TABLE IF NOT EXISTS users (id VARCHAR(50) PRIMARY KEY, name VARCHAR(100), email VARCHAR(100), role VARCHAR(50), permissions TEXT)`);
         await connection.query(`CREATE TABLE IF NOT EXISTS menu_items (id VARCHAR(50) PRIMARY KEY, category_id VARCHAR(50), sub_category_id VARCHAR(50), name VARCHAR(100), category VARCHAR(100), price DECIMAL(10, 2), description TEXT, is_veg TINYINT(1), available TINYINT(1), ingredients TEXT, portion_prices TEXT, tags TEXT)`);
         await connection.query(`CREATE TABLE IF NOT EXISTS ingredients (id VARCHAR(50) PRIMARY KEY, name VARCHAR(100), category VARCHAR(100), unit VARCHAR(20), unit_cost DECIMAL(10, 2), stock_quantity DECIMAL(10, 2))`);
@@ -84,7 +109,7 @@ const initDb = async () => {
         await connection.query(`CREATE TABLE IF NOT EXISTS requisitions (id VARCHAR(50) PRIMARY KEY, ingredient_id VARCHAR(50), ingredient_name VARCHAR(100), quantity DECIMAL(10, 2), unit VARCHAR(20), urgency VARCHAR(20), status VARCHAR(20), requested_by VARCHAR(100), requested_at VARCHAR(64), notes TEXT, estimated_unit_cost DECIMAL(10, 2), preferred_supplier VARCHAR(100))`);
         await connection.query(`CREATE TABLE IF NOT EXISTS customers (id VARCHAR(50) PRIMARY KEY, name VARCHAR(100), phone VARCHAR(20), email VARCHAR(100), loyalty_points INT, total_visits INT, last_visit VARCHAR(64), notes TEXT)`);
 
-        // --- SEEDING LOGIC ---
+        // --- SEEDING ---
         const [userRows] = await connection.query('SELECT count(*) as count FROM users');
         if (Number(userRows[0].count) === 0) {
             await connection.query('INSERT INTO users (id, name, email, role, permissions) VALUES (?, ?, ?, ?, ?)', ['u1', 'Administrator', 'admin@biharichatkara.com', 'Manager', '[]']);
@@ -99,10 +124,16 @@ const initDb = async () => {
         }
 
         connection.release();
+        dbError = null;
         console.log("[DB] Initialization and Seeding Complete.");
     } catch (e) {
         console.error("[DB] Critical Error initializing MySQL:", e.message);
+        // Specifically log socket errors
+        if (e.code === 'ENOENT' && e.message.includes('connect')) {
+             console.error(`[DB] Socket Error: Ensure Cloud SQL Admin API is enabled and the socket path '${DB_CONFIG.socketPath}' is accessible.`);
+        }
         pool = null;
+        dbError = e.message;
     }
 };
 
@@ -116,16 +147,39 @@ const healthHandler = (req, res) => {
         return res.status(503).json({
             status: 'error',
             message: 'Database not connected.',
-            database: 'disconnected'
+            details: dbError,
+            config: {
+                host: DB_CONFIG.host,
+                socketPath: DB_CONFIG.socketPath,
+                user: DB_CONFIG.user
+            }
         });
     }
     res.json({
         status: 'ok',
         database: 'mysql',
-        host: DB_CONFIG.host,
+        config: {
+            host: DB_CONFIG.host,
+            socketPath: DB_CONFIG.socketPath,
+            user: DB_CONFIG.user
+        },
         timestamp: new Date().toISOString()
     });
 };
+
+// --- API ROUTER ---
+const api = express.Router();
+
+// 1. Health Check
+api.get('/health', healthHandler);
+
+// 2. Database Guard Middleware
+const ensureDb = (req, res, next) => {
+    if (!pool) return res.status(503).json({ error: 'Database connection failed. Server is running but DB is unreachable.', details: dbError });
+    next();
+};
+
+api.use(ensureDb);
 
 // --- API HELPER ---
 const parseRow = (row, jsonFields = []) => {
@@ -154,20 +208,8 @@ const parseRow = (row, jsonFields = []) => {
     return final;
 };
 
-// --- API ROUTER ---
-const api = express.Router();
 
-// 1. Health Check (Accessible without DB)
-api.get('/health', healthHandler);
-
-// 2. Database Guard Middleware
-const ensureDb = (req, res, next) => {
-    if (!pool) return res.status(503).json({ error: 'Database connection failed. Server is running but DB is unreachable.' });
-    next();
-};
-api.use(ensureDb);
-
-// 3. API Routes (Mounted on Router)
+// 3. API Routes
 api.get('/', (req, res) => res.json({ message: "Bihari Chatkara API Root" }));
 
 // Orders
@@ -280,7 +322,7 @@ api.delete('/customers/:id', async (req, res) => {
     try { await pool.query('DELETE FROM customers WHERE id = ?', [req.params.id]); res.json({ success: true }); } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
-// Mount the Router
+// Mount API Router
 app.use('/api', api);
 
 // --- STATIC ASSETS ---
@@ -298,9 +340,10 @@ if (fs.existsSync(distPath)) {
 // --- START SERVER ---
 const startServer = async () => {
     app.listen(PORT, '0.0.0.0', () => {
-        console.log(`[Boot] Server running new server  on http://0.0.0.0:${PORT}`);
+        console.log(`[Boot] Server running on http://0.0.0.0:${PORT}`);
     });
-    initDb().then(() => console.log("[Boot] DB Ready")).catch(e => console.error("[Boot] DB Fail", e));
+    // Initialize DB in background
+    initDb();
 };
 
 startServer();
