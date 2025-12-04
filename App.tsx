@@ -13,6 +13,7 @@ import Login from './components/Login';
 import { Order, OrderStatus, User, UserRole, Ingredient, Expense, RequisitionRequest, RequisitionStatus, MenuItem, Customer, PaymentMethod, PaymentStatus } from './types';
 import { Menu, Wifi, WifiOff } from 'lucide-react';
 import * as db from './services/db';
+import { APP_DATA_VERSION } from './constants';
 
 const App: React.FC = () => {
   // --- AUTH STATE ---
@@ -40,6 +41,7 @@ const App: React.FC = () => {
   useEffect(() => {
     // Determine connection status
     setIsLive(db.isDatabaseLive());
+    console.log(`[System] Booting Bihari Chatkara RMS v${APP_DATA_VERSION}...`);
 
     // Subscribe to all collections
     // NOTE: Fallbacks set to empty arrays [] to ensure NO static data is used.
