@@ -38,7 +38,7 @@ const getDbConfig = () => {
     }
     // Fallback: Standard TCP
     else {
-        config.host = process.env.DB_HOST || '34.131.187.182';
+        config.host = process.env.DB_HOST || '127.0.0.1';
         config.port = process.env.DB_PORT ? parseInt(process.env.DB_PORT) : 3306;
         console.log(`[DB Config] Using TCP Host: ${config.host}:${config.port}`);
     }
