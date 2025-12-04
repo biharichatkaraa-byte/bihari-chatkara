@@ -1,7 +1,8 @@
+
 import React, { useState, useMemo, useRef, useEffect } from 'react';
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid, PieChart, Pie, Cell, Legend, AreaChart, Area } from 'recharts';
 import { Order, Expense, UserRole, MenuItem, Ingredient, PaymentStatus, OrderStatus } from '../types';
-import { DollarSign, TrendingDown, Clock, PieChart as PieChartIcon, Calendar, Filter, Download, Upload, Server, Activity, Loader2, Database, PlayCircle, CheckCircle, AlertTriangle, Wifi, WifiOff, Globe, Link } from 'lucide-react';
+import { DollarSign, TrendingDown, Clock, PieChart as PieChartIcon, Calendar, Filter, Download, Upload, Server, Activity, Loader2, Database, PlayCircle, CheckCircle, AlertTriangle, Wifi, WifiOff, Globe, Link, FileText } from 'lucide-react';
 import { startOfDay, endOfDay, isWithinInterval, format, subDays, startOfMonth, endOfMonth } from 'date-fns';
 import { isDatabaseLive, setApiUrl, disconnect, getApiUrl } from '../services/db';
 import { APP_DATA_VERSION } from '../constants';
@@ -82,7 +83,8 @@ const Dashboard: React.FC<DashboardProps> = ({ orders, expenses = [], allData, o
       if (filterType === '15days') return { start: subDays(now, 15), end: endOfDay(now) };
       if (filterType === '30days') return { start: subDays(now, 30), end: endOfDay(now) };
       if (filterType === 'custom' && customStart && customEnd) {
-          return { start: startOfDay(new Date(customStart)), end: endOfDay(new Date(customEnd)) };
+          // Use Exact Time specified by user input
+          return { start: new Date(customStart), end: new Date(customEnd) };
       }
       return { start: startOfDay(now), end: endOfDay(now) }; // Default
   };
@@ -102,7 +104,9 @@ const Dashboard: React.FC<DashboardProps> = ({ orders, expenses = [], allData, o
   const metrics = useMemo(() => {
       const revenue = filteredData.orders.reduce((acc, o) => {
           const subtotal = o.items.reduce((sum, i) => sum + (i.priceAtOrder * i.quantity), 0);
-          const total = subtotal - (o.discount || 0); // Simplified tax handling for display
+          const taxable = Math.max(0, subtotal - (o.discount || 0));
+          const taxAmount = taxable * ((o.taxRate || 0) / 100);
+          const total = taxable + taxAmount;
           return acc + total;
       }, 0);
 
@@ -117,20 +121,80 @@ const Dashboard: React.FC<DashboardProps> = ({ orders, expenses = [], allData, o
   const chartData = useMemo(() => {
       const dataMap = new Map<string, { date: string, revenue: number, orders: number }>();
       
-      // Initialize days based on filter (simplified to just iterate found orders for demo)
       filteredData.orders.forEach(o => {
           const dateKey = format(new Date(o.createdAt), 'MMM dd');
           if (!dataMap.has(dateKey)) dataMap.set(dateKey, { date: dateKey, revenue: 0, orders: 0 });
           
           const entry = dataMap.get(dateKey)!;
-          const total = o.items.reduce((s, i) => s + (i.priceAtOrder * i.quantity), 0) - (o.discount || 0);
+          const subtotal = o.items.reduce((s, i) => s + (i.priceAtOrder * i.quantity), 0);
+          const taxable = Math.max(0, subtotal - (o.discount || 0));
+          const taxAmount = taxable * ((o.taxRate || 0) / 100);
+          const total = taxable + taxAmount;
+          
           entry.revenue += total;
           entry.orders += 1;
       });
 
-      // Convert to array and sort
       return Array.from(dataMap.values()).sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
   }, [filteredData]);
+
+  const handleDownloadSalesReport = () => {
+      const headers = [
+          "Order ID", "Date", "Time", "Table", "Server", "Type", "Status",
+          "Payment Method", "Items Summary", "Subtotal", "Discount", "Tax %", "Tax Amount", "Total Amount"
+      ];
+
+      const csvRows = [headers.join(",")];
+
+      filteredData.orders.forEach(order => {
+          const date = new Date(order.createdAt);
+          const dateStr = format(date, 'yyyy-MM-dd');
+          const timeStr = format(date, 'HH:mm:ss');
+          
+          // Helper to safely escape CSV strings
+          const safeString = (str: string) => `"${(str || '').replace(/"/g, '""')}"`;
+
+          const itemsSummary = order.items.map(i => {
+              const portion = i.portion && i.portion !== 'Full' ? `(${i.portion})` : '';
+              return `${i.quantity}x ${i.name}${portion}`;
+          }).join('; ');
+          
+          const subtotal = order.items.reduce((acc, i) => acc + (i.priceAtOrder * i.quantity), 0);
+          const discount = order.discount || 0;
+          const taxRate = order.taxRate || 0;
+          const taxable = Math.max(0, subtotal - discount);
+          const taxAmount = taxable * (taxRate / 100);
+          const total = taxable + taxAmount;
+
+          const row = [
+              safeString(order.id),
+              dateStr,
+              timeStr,
+              order.tableNumber,
+              safeString(order.serverName),
+              order.tableNumber ? "Dine-in" : "Takeaway",
+              order.status,
+              order.paymentMethod || "N/A",
+              safeString(itemsSummary),
+              subtotal.toFixed(2),
+              discount.toFixed(2),
+              taxRate.toFixed(2),
+              taxAmount.toFixed(2),
+              total.toFixed(2)
+          ];
+          csvRows.push(row.join(","));
+      });
+
+      const csvString = csvRows.join("\n");
+      const blob = new Blob([csvString], { type: 'text/csv;charset=utf-8;' });
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement("a");
+      link.setAttribute("href", url);
+      link.setAttribute("download", `sales_report_${format(new Date(), 'yyyy-MM-dd_HHmm')}.csv`);
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+  };
 
   const COLORS = ['#3b82f6', '#10b981', '#f59e0b', '#ef4444'];
 
@@ -212,35 +276,50 @@ const Dashboard: React.FC<DashboardProps> = ({ orders, expenses = [], allData, o
       )}
 
       {/* Date Filter Bar */}
-      <div className="bg-white p-2 rounded-xl shadow-sm border border-slate-200 flex flex-wrap gap-2 items-center">
-          <Filter size={16} className="text-slate-400 ml-2" />
-          <span className="text-xs font-bold text-slate-500 uppercase mr-2">Time Period:</span>
-          {(['today', '7days', '15days', '30days'] as FilterType[]).map(type => (
-              <button
-                key={type}
-                onClick={() => setFilterType(type)}
-                className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-colors ${filterType === type ? 'bg-blue-100 text-blue-700' : 'text-slate-600 hover:bg-slate-100'}`}
-              >
-                  {type === 'today' ? 'Today' : `Last ${type.replace('days', ' Days')}`}
-              </button>
-          ))}
-          
-          <div className="h-6 w-px bg-slate-200 mx-2"></div>
-          
+      <div className="bg-white p-2 rounded-xl shadow-sm border border-slate-200 flex flex-wrap gap-2 items-center justify-between">
+          <div className="flex flex-wrap gap-2 items-center">
+            <Filter size={16} className="text-slate-400 ml-2" />
+            <span className="text-xs font-bold text-slate-500 uppercase mr-2">Time Period:</span>
+            {(['today', '7days', '15days', '30days'] as FilterType[]).map(type => (
+                <button
+                    key={type}
+                    onClick={() => setFilterType(type)}
+                    className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-colors ${filterType === type ? 'bg-blue-100 text-blue-700' : 'text-slate-600 hover:bg-slate-100'}`}
+                >
+                    {type === 'today' ? 'Today' : `Last ${type.replace('days', ' Days')}`}
+                </button>
+            ))}
+            
+            <div className="h-6 w-px bg-slate-200 mx-2"></div>
+            
+            <button 
+                onClick={() => setFilterType('custom')}
+                className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-colors flex items-center gap-2 ${filterType === 'custom' ? 'bg-blue-100 text-blue-700' : 'text-slate-600 hover:bg-slate-100'}`}
+            >
+                <Calendar size={14} /> Custom
+            </button>
+            
+            {filterType === 'custom' && (
+                <div className="flex items-center gap-2 ml-2 animate-in fade-in slide-in-from-left-2">
+                    <div className="flex items-center border rounded px-2 py-1 bg-slate-50">
+                        <span className="text-[10px] text-slate-400 mr-1 uppercase font-bold">From</span>
+                        <input type="datetime-local" value={customStart} onChange={e => setCustomStart(e.target.value)} className="text-xs bg-transparent outline-none text-slate-700" />
+                    </div>
+                    <span className="text-slate-400">-</span>
+                    <div className="flex items-center border rounded px-2 py-1 bg-slate-50">
+                        <span className="text-[10px] text-slate-400 mr-1 uppercase font-bold">To</span>
+                        <input type="datetime-local" value={customEnd} onChange={e => setCustomEnd(e.target.value)} className="text-xs bg-transparent outline-none text-slate-700" />
+                    </div>
+                </div>
+            )}
+          </div>
+
           <button 
-             onClick={() => setFilterType('custom')}
-             className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-colors flex items-center gap-2 ${filterType === 'custom' ? 'bg-blue-100 text-blue-700' : 'text-slate-600 hover:bg-slate-100'}`}
+              onClick={handleDownloadSalesReport}
+              className="flex items-center gap-2 bg-green-600 text-white px-4 py-2 rounded-lg text-xs font-bold hover:bg-green-700 transition-colors shadow-sm"
           >
-              <Calendar size={14} /> Custom
+              <FileText size={16} /> Download Sales Report
           </button>
-          
-          {filterType === 'custom' && (
-              <div className="flex items-center gap-2 ml-2 animate-in fade-in slide-in-from-left-2">
-                  <input type="date" value={customStart} onChange={e => setCustomStart(e.target.value)} className="text-xs border rounded px-2 py-1" />
-                  <span className="text-slate-400">-</span>
-                  <input type="date" value={customEnd} onChange={e => setCustomEnd(e.target.value)} className="text-xs border rounded px-2 py-1" />
-              </div>
-          )}
       </div>
 
       {/* KPI Cards */}

@@ -5,11 +5,13 @@ export enum OrderStatus {
   IN_PROGRESS = 'IN_PROGRESS',
   READY = 'READY',
   SERVED = 'SERVED',
+  CANCELLED = 'CANCELLED',
 }
 
 export enum PaymentStatus {
   PENDING = 'PENDING',
   PAID = 'PAID',
+  CANCELLED = 'CANCELLED',
 }
 
 export enum PaymentMethod {
@@ -66,6 +68,7 @@ export interface MenuItem {
   subCategoryId?: string; // New field for bulk mapping
   name: string;
   category: string; // Display category name
+  subCategory?: string; // Display sub-category name
   price: number; // Base price (usually Full)
   portionPrices?: {
       quarter?: number;

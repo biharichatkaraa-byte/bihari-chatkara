@@ -1,3 +1,4 @@
+
 import React, { useState, useEffect } from 'react';
 import Sidebar from './components/Sidebar';
 import Dashboard from './components/Dashboard';
@@ -8,7 +9,6 @@ import StaffManagement from './components/StaffManagement';
 import Expenses from './components/Expenses';
 import Procurement from './components/Procurement';
 import Customers from './components/Customers';
-import AiAssistant from './components/AiAssistant';
 import Login from './components/Login';
 import { Order, OrderStatus, User, UserRole, Ingredient, Expense, RequisitionRequest, RequisitionStatus, MenuItem, Customer, PaymentMethod, PaymentStatus } from './types';
 import { Menu, Wifi, WifiOff } from 'lucide-react';
@@ -94,14 +94,28 @@ const App: React.FC = () => {
 
   // POS Handlers
   const handlePlaceOrder = (order: Order) => {
+    setOrders(prev => [order, ...prev]); // Optimistic
     db.addItem('orders', order);
   };
 
-  const handleUpdatePayment = (orderId: string, method: PaymentMethod) => {
-    const order = orders.find(o => o.id === orderId);
-    if (!order) return;
+  const handleUpdateOrder = (order: Order) => {
+    setOrders(prev => prev.map(o => o.id === order.id ? order : o)); // Optimistic
+    db.updateItem('orders', order);
+  };
 
+  const handleUpdatePayment = (orderId: string, method: PaymentMethod) => {
+    // Find and update strictly for optimistic UI
+    const orderIndex = orders.findIndex(o => o.id === orderId);
+    if (orderIndex === -1) return;
+
+    const order = orders[orderIndex];
     const updatedOrder = { ...order, paymentStatus: PaymentStatus.PAID, paymentMethod: method, completedAt: new Date() };
+    
+    // Optimistic Update
+    const newOrders = [...orders];
+    newOrders[orderIndex] = updatedOrder;
+    setOrders(newOrders);
+
     db.updateItem('orders', updatedOrder);
 
     // Inventory Deduction
@@ -112,6 +126,7 @@ const App: React.FC = () => {
                 const ingredient = ingredients.find(i => i.id === ingRef.ingredientId);
                 if (ingredient) {
                     const newQty = Math.max(0, ingredient.stockQuantity - (ingRef.quantity * lineItem.quantity));
+                    // Optimistic Inventory update
                     db.updateItem('ingredients', { ...ingredient, stockQuantity: newQty });
                 }
             });
@@ -123,53 +138,107 @@ const App: React.FC = () => {
   const handleUpdateOrderStatus = (orderId: string, status: OrderStatus) => {
     const order = orders.find(o => o.id === orderId);
     if (order) {
-        db.updateItem('orders', { ...order, status });
+        const updated = { ...order, status };
+        setOrders(prev => prev.map(o => o.id === orderId ? updated : o)); // Optimistic
+        db.updateItem('orders', updated);
     }
   };
 
   // Inventory Handlers
   const handleUpdateInventory = (updatedIngredients: Ingredient[]) => {
+    setIngredients(updatedIngredients); // Optimistic
     updatedIngredients.forEach(ing => db.updateItem('ingredients', ing));
   };
+  const handleDeleteIngredient = (id: string) => {
+      setIngredients(prev => prev.filter(i => i.id !== id)); // Optimistic
+      db.deleteItem('ingredients', id);
+  }
 
   // Menu Handlers
-  const handleAddMenuItem = (item: MenuItem) => db.addItem('menuItems', item);
-  const handleUpdateMenuItem = (item: MenuItem) => db.updateItem('menuItems', item);
-  const handleDeleteMenuItem = (id: string) => db.deleteItem('menuItems', id);
+  const handleAddMenuItem = (item: MenuItem) => {
+      setMenuItems(prev => [...prev, item]); // Optimistic
+      db.addItem('menuItems', item);
+  }
+  const handleUpdateMenuItem = (item: MenuItem) => {
+      setMenuItems(prev => prev.map(m => m.id === item.id ? item : m)); // Optimistic
+      db.updateItem('menuItems', item);
+  }
+  const handleDeleteMenuItem = (id: string) => {
+      setMenuItems(prev => prev.filter(m => m.id !== id)); // Optimistic
+      db.deleteItem('menuItems', id);
+  }
   const handleBulkUpdateMenuItems = (ids: string[], updates: Partial<MenuItem>) => {
+      setMenuItems(prev => prev.map(m => ids.includes(m.id) ? { ...m, ...updates } : m)); // Optimistic
       const itemsToUpdate = menuItems.filter(m => ids.includes(m.id)).map(m => ({ ...m, ...updates }));
       db.bulkUpdateItems('menuItems', itemsToUpdate);
   };
-  const handleBulkDeleteMenuItems = (ids: string[]) => db.bulkDeleteItems('menuItems', ids);
-  const handleBulkAddMenuItems = (items: MenuItem[]) => db.bulkAddItems('menuItems', items);
+  const handleBulkDeleteMenuItems = (ids: string[]) => {
+      setMenuItems(prev => prev.filter(m => !ids.includes(m.id))); // Optimistic
+      db.bulkDeleteItems('menuItems', ids);
+  }
+  const handleBulkAddMenuItems = (items: MenuItem[]) => {
+      setMenuItems(prev => [...items, ...prev]); // Optimistic
+      db.bulkAddItems('menuItems', items);
+  }
 
   // Staff Handlers
-  const handleAddUser = (user: User) => db.addItem('users', user);
-  const handleDeleteUser = (id: string) => db.deleteItem('users', id);
+  const handleAddUser = (user: User) => {
+      setUsers(prev => [...prev, user]); // Optimistic
+      db.addItem('users', user);
+  }
+  const handleDeleteUser = (id: string) => {
+      setUsers(prev => prev.filter(u => u.id !== id)); // Optimistic
+      db.deleteItem('users', id);
+  }
 
   // Expense Handlers
-  const handleAddExpense = (expense: Expense) => db.addItem('expenses', expense);
-  const handleUpdateExpense = (updated: Expense) => db.updateItem('expenses', updated);
-  const handleDeleteExpense = (id: string) => db.deleteItem('expenses', id);
+  const handleAddExpense = (expense: Expense) => {
+      setExpenses(prev => [expense, ...prev]); // Optimistic
+      db.addItem('expenses', expense);
+  }
+  const handleUpdateExpense = (updated: Expense) => {
+      setExpenses(prev => prev.map(e => e.id === updated.id ? updated : e)); // Optimistic
+      db.updateItem('expenses', updated);
+  }
+  const handleDeleteExpense = (id: string) => {
+      setExpenses(prev => prev.filter(e => e.id !== id)); // Optimistic
+      db.deleteItem('expenses', id);
+  }
 
   // Procurement Handlers
-  const handleAddRequisition = (req: RequisitionRequest) => db.addItem('requisitions', req);
+  const handleAddRequisition = (req: RequisitionRequest) => {
+      setRequisitions(prev => [req, ...prev]); // Optimistic
+      db.addItem('requisitions', req);
+  }
   const handleUpdateRequisition = (id: string, status: RequisitionStatus) => {
       const req = requisitions.find(r => r.id === id);
-      if(req) db.updateItem('requisitions', { ...req, status });
+      if(req) {
+          const updated = { ...req, status };
+          setRequisitions(prev => prev.map(r => r.id === id ? updated : r)); // Optimistic
+          db.updateItem('requisitions', updated);
+      }
   };
   
   const handleReceiveStock = (reqId: string) => {
       const req = requisitions.find(r => r.id === reqId);
       if (req && req.status !== RequisitionStatus.RECEIVED) {
           // 1. Update Request
-          db.updateItem('requisitions', { ...req, status: RequisitionStatus.RECEIVED });
+          const updatedReq = { ...req, status: RequisitionStatus.RECEIVED };
+          setRequisitions(prev => prev.map(r => r.id === reqId ? updatedReq : r));
+          db.updateItem('requisitions', updatedReq);
           
           // 2. Add to Inventory
-          const existingIng = ingredients.find(i => i.id === req.ingredientId);
-          if (existingIng) {
+          const existingIngIndex = ingredients.findIndex(i => i.id === req.ingredientId);
+          if (existingIngIndex >= 0) {
+              const existingIng = ingredients[existingIngIndex];
               const updatedIng = { ...existingIng, stockQuantity: existingIng.stockQuantity + req.quantity };
               if (req.estimatedUnitCost) updatedIng.unitCost = req.estimatedUnitCost;
+              
+              setIngredients(prev => {
+                  const copy = [...prev];
+                  copy[existingIngIndex] = updatedIng;
+                  return copy;
+              });
               db.updateItem('ingredients', updatedIng);
           } else {
               const newIng: Ingredient = {
@@ -180,6 +249,7 @@ const App: React.FC = () => {
                   unitCost: req.estimatedUnitCost || 0,
                   stockQuantity: req.quantity
               };
+              setIngredients(prev => [...prev, newIng]);
               db.addItem('ingredients', newIng);
           }
 
@@ -193,17 +263,30 @@ const App: React.FC = () => {
                   date: new Date(),
                   reportedBy: 'System'
               };
+              setExpenses(prev => [expense, ...prev]);
               db.addItem('expenses', expense);
           }
       }
   };
 
-  const handleAddIngredient = (ing: Ingredient) => db.addItem('ingredients', ing);
-  const handleBulkAddIngredients = (ings: Ingredient[]) => db.bulkAddItems('ingredients', ings);
+  const handleAddIngredient = (ing: Ingredient) => {
+      setIngredients(prev => [...prev, ing]);
+      db.addItem('ingredients', ing);
+  }
+  const handleBulkAddIngredients = (ings: Ingredient[]) => {
+      setIngredients(prev => [...prev, ...ings]);
+      db.bulkAddItems('ingredients', ings);
+  }
 
   // Customer Handlers
-  const handleAddCustomer = (c: Customer) => db.addItem('customers', c);
-  const handleDeleteCustomer = (id: string) => db.deleteItem('customers', id);
+  const handleAddCustomer = (c: Customer) => {
+      setCustomers(prev => [...prev, c]);
+      db.addItem('customers', c);
+  }
+  const handleDeleteCustomer = (id: string) => {
+      setCustomers(prev => prev.filter(c => c.id !== id));
+      db.deleteItem('customers', id);
+  }
 
   // Import/Export (Local Backup)
   const handleExportData = () => {
@@ -239,6 +322,8 @@ const App: React.FC = () => {
                   if (data.ingredients) db.bulkAddItems('ingredients', data.ingredients);
                   // ... map other fields
                   alert('Data restored locally. If connected to Cloud, it will sync shortly.');
+                  // Force reload to pick up new data cleanly
+                  window.location.reload(); 
               }
           } catch (err) {
               alert('Invalid backup file.');
@@ -330,6 +415,7 @@ const App: React.FC = () => {
                 orders={orders} 
                 menuItems={menuItems} 
                 onPlaceOrder={handlePlaceOrder}
+                onUpdateOrder={handleUpdateOrder}
                 onUpdatePayment={handleUpdatePayment}
                 onUpdateMenuItem={handleUpdateMenuItem}
                 currentUserName={currentUser.name}
@@ -351,6 +437,7 @@ const App: React.FC = () => {
                 ingredients={ingredients} 
                 menuItems={menuItems}
                 onSave={handleUpdateInventory}
+                onDeleteIngredient={handleDeleteIngredient}
                 onAddMenuItem={handleAddMenuItem}
                 onUpdateMenuItem={handleUpdateMenuItem}
                 onDeleteMenuItem={handleDeleteMenuItem}
@@ -399,18 +486,6 @@ const App: React.FC = () => {
               />
           )}
         </div>
-        
-        <AiAssistant 
-            contextData={{
-                stats: {
-                    revenue: orders.reduce((acc, o) => acc + (o.paymentStatus === 'PAID' ? o.items.reduce((s, i) => s + (i.priceAtOrder * i.quantity), 0) : 0), 0),
-                    activeOrders: orders.filter(o => o.status !== 'SERVED').length,
-                    lowStockItems: ingredients.filter(i => i.stockQuantity < 50).map(i => i.name)
-                },
-                menu: menuItems.map(m => m.name),
-                inventoryCount: ingredients.length
-            }}
-        />
       </main>
     </div>
   );

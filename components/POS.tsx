@@ -1,13 +1,14 @@
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { MenuItem, Order, OrderStatus, PaymentStatus, LineItem, PaymentMethod, UserRole } from '../types';
-import { Plus, Minus, Trash2, Send, CreditCard, ShoppingCart, Banknote, Smartphone, Search, X, Clock, CheckCircle, RotateCcw, Receipt, AlertCircle, Zap, Tag, Percent, Ban, Eye, EyeOff, Power, Printer, Pencil, Save, ChevronUp, ChevronDown, ArrowLeft, Check } from 'lucide-react';
-import { format } from 'date-fns';
+import { Plus, Minus, Trash2, Send, CreditCard, ShoppingCart, Banknote, Smartphone, Search, X, Clock, CheckCircle, RotateCcw, Receipt, AlertCircle, Zap, Tag, Percent, Ban, Eye, EyeOff, Power, Printer, Pencil, Save, ChevronUp, ChevronDown, ArrowLeft, Check, LayoutGrid, Utensils, Users, Timer, AlertTriangle, FileText, SkipForward } from 'lucide-react';
+import { format, formatDistanceToNow } from 'date-fns';
 
 interface POSProps {
   orders: Order[];
   menuItems: MenuItem[];
   onPlaceOrder: (order: Order) => void;
+  onUpdateOrder: (order: Order) => void;
   onUpdatePayment: (orderId: string, method: PaymentMethod) => void;
   onUpdateMenuItem: (item: MenuItem) => void;
   currentUserName: string;
@@ -16,15 +17,30 @@ interface POSProps {
 
 type PortionType = 'Full' | 'Half' | 'Quarter';
 
-const POS: React.FC<POSProps> = ({ orders, menuItems, onPlaceOrder, onUpdatePayment, onUpdateMenuItem, currentUserName, userRole }) => {
-  const [activeView, setActiveView] = useState<'new_order' | 'active_tables' | 'history'>('new_order');
+// Mock Table Configuration
+const TABLE_ZONES = [
+    { name: 'Main Hall', tables: [1, 2, 3, 4, 5, 6, 7, 8] },
+    { name: 'Family AC', tables: [9, 10, 11, 12] },
+    { name: 'Garden Patio', tables: [13, 14, 15, 16] }
+];
+
+const POS: React.FC<POSProps> = ({ orders, menuItems, onPlaceOrder, onUpdateOrder, onUpdatePayment, onUpdateMenuItem, currentUserName, userRole }) => {
+  const [activeView, setActiveView] = useState<'tables' | 'new_order' | 'active_tables' | 'history'>('tables');
   
+  // -- TABLE MANAGEMENT STATE --
+  const [selectedTable, setSelectedTable] = useState<number | null>(null);
+  const [occupiedTableId, setOccupiedTableId] = useState<number | null>(null); // For the table action modal
+
   // -- NEW ORDER STATE --
   const [currentCart, setCurrentCart] = useState<LineItem[]>([]);
   const [selectedCategory, setSelectedCategory] = useState<string>('All');
+  const [selectedSubCategory, setSelectedSubCategory] = useState<string>('All');
   const [showPaymentOptions, setShowPaymentOptions] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
   
+  // Editing existing order state
+  const [editingOrder, setEditingOrder] = useState<Order | null>(null);
+
   // Mobile Cart State
   const [showMobileCart, setShowMobileCart] = useState(false);
   
@@ -40,11 +56,17 @@ const POS: React.FC<POSProps> = ({ orders, menuItems, onPlaceOrder, onUpdatePaym
   const [selectedPortionType, setSelectedPortionType] = useState<PortionType>('Half');
   const [portionQuantity, setPortionQuantity] = useState<number>(1);
 
-  // Custom Item State
+  // Custom Item State (Modal)
   const [showCustomItemModal, setShowCustomItemModal] = useState(false);
   const [customItemName, setCustomItemName] = useState('');
   const [customItemPrice, setCustomItemPrice] = useState('');
+  const [customItemQty, setCustomItemQty] = useState('1');
   const [customItemPortion, setCustomItemPortion] = useState<PortionType>('Full');
+
+  // Custom Item State (Cart Inline)
+  const [cartCustomName, setCartCustomName] = useState('');
+  const [cartCustomPrice, setCartCustomPrice] = useState('');
+  const [cartCustomQty, setCartCustomQty] = useState('1');
 
   // -- ACTIVE/HISTORY STATE --
   const [settleOrderId, setSettleOrderId] = useState<string | null>(null);
@@ -58,10 +80,11 @@ const POS: React.FC<POSProps> = ({ orders, menuItems, onPlaceOrder, onUpdatePaym
   const [receiptDetails, setReceiptDetails] = useState({
       name: 'Bihari Chatkara',
       tagline: 'The Authentic Taste',
-      address1: '123, Flavor Street, Foodie Zone',
-      address2: 'Patna, Bihar - 800001',
-      phone: '+91 98765 43210',
-      gstin: '10AAAAA0000A1Z5'
+      address1: 'Part-1, Lower Ground Floor, Amrapali Sapphire Arcade, AT-004',
+      address2: 'Sadarpur, Sector-45, Noida, Uttar Pradesh 201303',
+      phone: '+91 8595709271',
+      gstin: '09IBKPK8468R1Z8',
+      fssai: '22723925000849'
   });
   const [isEditingReceipt, setIsEditingReceipt] = useState(false);
 
@@ -69,7 +92,9 @@ const POS: React.FC<POSProps> = ({ orders, menuItems, onPlaceOrder, onUpdatePaym
   useEffect(() => {
       const savedDetails = localStorage.getItem('rms_receipt_details');
       if (savedDetails) {
-          setReceiptDetails(JSON.parse(savedDetails));
+          const parsed = JSON.parse(savedDetails);
+          // Merge to ensure new fields like fssai exist if missing in old saved data
+          setReceiptDetails(prev => ({ ...prev, ...parsed }));
       }
   }, []);
 
@@ -78,23 +103,45 @@ const POS: React.FC<POSProps> = ({ orders, menuItems, onPlaceOrder, onUpdatePaym
       setIsEditingReceipt(false);
   };
 
-  const categories = ['All', ...Array.from(new Set(menuItems.map(i => i.category)))];
+  const categories = useMemo(() => {
+      const cats = new Set(menuItems.map(i => i.category));
+      return ['All', ...Array.from(cats).sort()];
+  }, [menuItems]);
+
+  const subCategories = useMemo(() => {
+      if (selectedCategory === 'All') return [];
+      const subs = new Set(
+          menuItems
+            .filter(i => i.category === selectedCategory && i.subCategory)
+            .map(i => i.subCategory!)
+      );
+      return Array.from(subs).sort();
+  }, [menuItems, selectedCategory]);
+
+  // Reset SubCategory when Category Changes
+  useEffect(() => {
+      setSelectedSubCategory('All');
+  }, [selectedCategory]);
 
   // Logic to calculate price based on portion (Specific vs Multiplier)
-  const getPortionPrice = (item: MenuItem, portion: PortionType) => {
+  const getPortionPrice = (item: MenuItem, portion: PortionType): number => {
       // 1. Check for specific pricing from bulk upload
-      if (item.portionPrices) {
-          if (portion === 'Quarter' && item.portionPrices.quarter) return item.portionPrices.quarter;
-          if (portion === 'Half' && item.portionPrices.half) return item.portionPrices.half;
-          if (portion === 'Full' && item.portionPrices.full) return item.portionPrices.full;
+      if (item.portionPrices && (item.portionPrices.half || item.portionPrices.quarter || item.portionPrices.full)) {
+          if (portion === 'Quarter' && item.portionPrices.quarter && item.portionPrices.quarter > 0) return item.portionPrices.quarter;
+          if (portion === 'Half' && item.portionPrices.half && item.portionPrices.half > 0) return item.portionPrices.half;
+          if (portion === 'Full' && item.portionPrices.full && item.portionPrices.full > 0) return item.portionPrices.full;
       }
       
-      // 2. Fallback to Multiplier if no specific price
-      let multiplier = 1.0;
-      if (portion === 'Quarter') multiplier = 0.4;
-      if (portion === 'Half') multiplier = 0.6;
+      // 2. Fallback for manual items or legacy data without portionPrices
+      // This ensures Half/Quarter options appear even if not explicitly set in the bulk sheet
+      const basePrice = item.price || 0;
+      if (basePrice > 0) {
+          if (portion === 'Full') return basePrice;
+          if (portion === 'Half') return Math.ceil(basePrice * 0.6); // 60% of full
+          if (portion === 'Quarter') return Math.ceil(basePrice * 0.4); // 40% of full
+      }
       
-      return item.price * multiplier;
+      return 0;
   };
 
   // Opens Modal
@@ -102,8 +149,17 @@ const POS: React.FC<POSProps> = ({ orders, menuItems, onPlaceOrder, onUpdatePaym
     if (item.available === false) return; // Prevent action if out of stock
     setPortionItem(item);
     
-    // Default to Full if available, else first available
-    setSelectedPortionType('Full');
+    // Determine available portions
+    // NOTE: We now allow calculation fallback, so Quarter should appear if Full price exists
+    const availablePortions = (['Full', 'Half', 'Quarter'] as PortionType[]).filter(type => getPortionPrice(item, type) > 0);
+    
+    // Default to first available option
+    if (availablePortions.length > 0) {
+        setSelectedPortionType(availablePortions[0]); 
+    } else {
+        // Fallback (e.g. if everything is 0, which shouldn't happen for valid items)
+        setSelectedPortionType('Full');
+    }
     setPortionQuantity(1);
   };
 
@@ -111,8 +167,15 @@ const POS: React.FC<POSProps> = ({ orders, menuItems, onPlaceOrder, onUpdatePaym
   const handleQuickAdd = (item: MenuItem, e: React.MouseEvent) => {
     e.stopPropagation(); 
     if (item.available === false) return; // Prevent action if out of stock
+    
     const price = getPortionPrice(item, 'Full');
-    addToCart(item, 'Full', price, 1);
+    
+    if (price > 0) {
+        addToCart(item, 'Full', price, 1);
+    } else {
+        // If Full portion is unavailable (0 price), open modal to select another portion
+        openPortionModal(item);
+    }
   };
 
   // Toggle Item Availability (Manager Only)
@@ -132,6 +195,7 @@ const POS: React.FC<POSProps> = ({ orders, menuItems, onPlaceOrder, onUpdatePaym
   const handleAddCustomItem = () => {
       if(!customItemName || !customItemPrice) return;
       const price = parseFloat(customItemPrice);
+      const qty = parseInt(customItemQty) || 1;
       
       const customItem: MenuItem = {
           id: `custom-${Date.now()}`,
@@ -144,11 +208,32 @@ const POS: React.FC<POSProps> = ({ orders, menuItems, onPlaceOrder, onUpdatePaym
       };
 
       // Add with specific portion string
-      addToCart(customItem, customItemPortion, price, 1);
+      addToCart(customItem, customItemPortion, price, qty);
       setShowCustomItemModal(false);
       setCustomItemName('');
       setCustomItemPrice('');
+      setCustomItemQty('1');
       setCustomItemPortion('Full');
+  };
+
+  const handleCartCustomAdd = () => {
+      if (!cartCustomName || !cartCustomPrice) return;
+      const price = parseFloat(cartCustomPrice);
+      const qty = parseInt(cartCustomQty) || 1;
+      
+      const customItem: MenuItem = {
+          id: `custom-${Date.now()}`,
+          name: cartCustomName,
+          category: 'Custom',
+          price: price, 
+          ingredients: [],
+          description: 'Custom Item',
+          available: true
+      };
+      addToCart(customItem, 'Full', price, qty);
+      setCartCustomName('');
+      setCartCustomPrice('');
+      setCartCustomQty('1');
   };
 
   const addToCart = (item: MenuItem, portion: string, price: number, qty: number = 1) => {
@@ -200,60 +285,100 @@ const POS: React.FC<POSProps> = ({ orders, menuItems, onPlaceOrder, onUpdatePaym
       return calculateFinalTotal(order.items, order.taxRate || 0, order.discount || 0);
   };
 
+  const constructOrderObject = (status: OrderStatus = OrderStatus.NEW, paymentStatus: PaymentStatus = PaymentStatus.PENDING, method?: PaymentMethod): Order => {
+      const tableNum = selectedTable || (Math.floor(Math.random() * 20) + 1);
+      
+      // If we are editing, preserve ID and created date
+      return {
+          id: editingOrder ? editingOrder.id : `o-${Math.floor(Math.random() * 10000)}`,
+          tableNumber: tableNum,
+          serverName: currentUserName,
+          items: [...currentCart],
+          status: status,
+          paymentStatus: paymentStatus,
+          paymentMethod: method,
+          createdAt: editingOrder ? editingOrder.createdAt : new Date(),
+          taxRate: parseFloat(manualTaxRate) || 0,
+          discount: parseFloat(manualDiscount) || 0,
+      };
+  };
+
   const handleKitchenSend = () => {
     if (currentCart.length === 0) return;
     
-    const newOrder: Order = {
-      id: `o-${Math.floor(Math.random() * 10000)}`,
-      tableNumber: Math.floor(Math.random() * 20) + 1, // Simulate table selection
-      serverName: currentUserName,
-      items: [...currentCart],
-      status: OrderStatus.NEW,
-      paymentStatus: PaymentStatus.PENDING,
-      createdAt: new Date(),
-      taxRate: parseFloat(manualTaxRate) || 0,
-      discount: parseFloat(manualDiscount) || 0,
-    };
+    const newOrder = constructOrderObject();
     
-    onPlaceOrder(newOrder);
+    if (editingOrder) {
+        // Update existing order
+        onUpdateOrder(newOrder);
+    } else {
+        // Place new order
+        onPlaceOrder(newOrder);
+    }
+    
     resetOrderState();
     
     // Visual Feedback
     setOrderSentSuccess(true);
-    setTimeout(() => setOrderSentSuccess(false), 2000);
+    setTimeout(() => {
+        setOrderSentSuccess(false);
+        setActiveView('tables'); 
+        setSelectedTable(null); 
+    }, 1500);
     
     setShowMobileCart(false);
+  };
+
+  const handleSkipBill = () => {
+      // Just save the cart to the order and go back, but don't change status to paid
+      if (currentCart.length === 0) return;
+      const orderToSave = constructOrderObject(editingOrder ? editingOrder.status : OrderStatus.NEW);
+      
+      if (editingOrder) {
+          onUpdateOrder(orderToSave);
+      } else {
+          onPlaceOrder(orderToSave);
+      }
+      
+      resetOrderState();
+      setActiveView('tables');
+      setSelectedTable(null);
+  };
+
+  const handlePrintOnly = () => {
+      // Just open the print modal without saving/finishing
+      const dummyOrder = constructOrderObject();
+      setPrintOrder(dummyOrder);
+      setShowPrintModal(true);
   };
 
   const handlePayment = (method: PaymentMethod, existingOrderId?: string) => {
     let orderToPrint: Order | null = null;
 
     if (existingOrderId) {
-        // Settling an active table
+        // Settling an active table directly from Active View
         onUpdatePayment(existingOrderId, method);
         orderToPrint = orders.find(o => o.id === existingOrderId) || null;
         if (orderToPrint) {
-             orderToPrint = { ...orderToPrint, paymentStatus: PaymentStatus.PAID, paymentMethod: method }; // Create local updated copy for print
+             orderToPrint = { ...orderToPrint, paymentStatus: PaymentStatus.PAID, paymentMethod: method };
         }
         setSettleOrderId(null);
     } else {
-        // Paying for a new order immediately
+        // Paying for a new/edit order immediately (Takeaway / Quick Serve)
         if (currentCart.length === 0) return;
-        const newOrder: Order = {
-            id: `o-${Math.floor(Math.random() * 10000)}`,
-            tableNumber: Math.floor(Math.random() * 20) + 1,
-            serverName: currentUserName,
-            items: [...currentCart],
-            status: OrderStatus.NEW, // Still goes to kitchen
-            paymentStatus: PaymentStatus.PAID,
-            paymentMethod: method,
-            createdAt: new Date(),
-            taxRate: parseFloat(manualTaxRate) || 0,
-            discount: parseFloat(manualDiscount) || 0,
-        };
-        onPlaceOrder(newOrder);
+        
+        const newOrder = constructOrderObject(OrderStatus.NEW, PaymentStatus.PAID, method);
+        
+        if (editingOrder) {
+            onUpdateOrder(newOrder); // This updates status to PAID via full object update
+        } else {
+            onPlaceOrder(newOrder);
+        }
+
         resetOrderState();
         orderToPrint = newOrder;
+        setActiveView('tables');
+        setSelectedTable(null);
     }
 
     // Trigger Print Modal
@@ -269,22 +394,187 @@ const POS: React.FC<POSProps> = ({ orders, menuItems, onPlaceOrder, onUpdatePaym
     setShowPaymentOptions(false);
     setManualTaxRate('');
     setManualDiscount('');
+    setEditingOrder(null);
   };
+
+  // --- HELPER FOR TABLES ---
+  const getTableStatus = (tableId: number) => {
+      // Find latest active order for this table
+      const activeOrder = orders.find(o => o.tableNumber === tableId && o.paymentStatus === PaymentStatus.PENDING && o.status !== OrderStatus.CANCELLED);
+      return activeOrder;
+  };
+
+  const handleTableClick = (tableId: number) => {
+      const activeOrder = getTableStatus(tableId);
+      
+      if (activeOrder) {
+          setOccupiedTableId(tableId); // Open Options Modal
+      } else {
+          // Table is free
+          setSelectedTable(tableId);
+          setEditingOrder(null); // Ensure fresh start
+          setActiveView('new_order');
+      }
+  };
+
+  const handleOccupiedAction = (action: 'add' | 'settle') => {
+      if (!occupiedTableId) return;
+      const activeOrder = getTableStatus(occupiedTableId);
+      
+      if (action === 'add' && activeOrder) {
+          // EDIT MODE: Load existing order into cart
+          setSelectedTable(occupiedTableId);
+          setEditingOrder(activeOrder);
+          setCurrentCart([...activeOrder.items]);
+          setManualTaxRate(activeOrder.taxRate?.toString() || '');
+          setManualDiscount(activeOrder.discount?.toString() || '');
+          setActiveView('new_order');
+      } else if (action === 'settle' && activeOrder) {
+          // SETTLE MODE: Use new_order view with payment options open to allow settling
+          setSelectedTable(occupiedTableId);
+          setEditingOrder(activeOrder);
+          setCurrentCart([...activeOrder.items]);
+          setManualTaxRate(activeOrder.taxRate?.toString() || '');
+          setManualDiscount(activeOrder.discount?.toString() || '');
+          setShowPaymentOptions(true);
+          setActiveView('new_order');
+      }
+      setOccupiedTableId(null);
+  };
+
+  const handleCancelOrder = () => {
+      if (!occupiedTableId) return;
+      const activeOrder = getTableStatus(occupiedTableId);
+      
+      if (activeOrder) {
+          if (confirm(`Are you sure you want to CANCEL the order for Table ${occupiedTableId}? This action cannot be undone.`)) {
+             onUpdateOrder({
+                 ...activeOrder,
+                 status: OrderStatus.CANCELLED,
+                 paymentStatus: PaymentStatus.CANCELLED
+             });
+             setOccupiedTableId(null);
+          }
+      }
+  };
+
 
   const filteredItems = menuItems.filter(i => {
       // 1. Availability Check (Hide sold out unless toggle is on)
       if (!showSoldOut && i.available === false) return false;
 
-      // 2. Category & Search
+      // 2. Category & Search & SubCategory
       const matchesCategory = selectedCategory === 'All' || i.category === selectedCategory;
+      const matchesSubCategory = selectedSubCategory === 'All' || i.subCategory === selectedSubCategory;
       const matchesSearch = i.name.toLowerCase().includes(searchQuery.toLowerCase());
       
-      return matchesCategory && matchesSearch;
+      return matchesCategory && matchesSubCategory && matchesSearch;
   });
 
   // --- VIEWS ---
 
+  const renderTablesView = () => {
+      return (
+          <div className="h-full bg-slate-50 p-4 overflow-y-auto relative">
+               <div className="flex justify-between items-center mb-6">
+                   <h2 className="text-2xl font-bold text-slate-800 flex items-center gap-2">
+                       <LayoutGrid className="text-blue-600" /> Table Management
+                   </h2>
+                   <div className="flex items-center gap-4 text-sm">
+                       <div className="flex items-center gap-2">
+                           <div className="w-4 h-4 bg-white border border-slate-300 rounded"></div>
+                           <span className="text-slate-600">Available</span>
+                       </div>
+                       <div className="flex items-center gap-2">
+                           <div className="w-4 h-4 bg-orange-100 border border-orange-300 rounded"></div>
+                           <span className="text-slate-600">Occupied</span>
+                       </div>
+                   </div>
+               </div>
+
+               <div className="space-y-8">
+                   {TABLE_ZONES.map((zone) => (
+                       <div key={zone.name} className="animate-in fade-in slide-in-from-bottom-4">
+                           <h3 className="text-lg font-bold text-slate-500 uppercase tracking-wider mb-4 border-b border-slate-200 pb-1">{zone.name}</h3>
+                           <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-6 gap-4">
+                               {zone.tables.map(tableNum => {
+                                   const activeOrder = getTableStatus(tableNum);
+                                   const isOccupied = !!activeOrder;
+                                   
+                                   return (
+                                       <button
+                                           key={tableNum}
+                                           onClick={() => handleTableClick(tableNum)}
+                                           className={`relative h-32 rounded-2xl border-2 transition-all flex flex-col items-center justify-center p-2 shadow-sm ${
+                                               isOccupied 
+                                                ? 'bg-orange-50 border-orange-200 hover:border-orange-400 hover:shadow-orange-100' 
+                                                : 'bg-white border-slate-200 hover:border-blue-400 hover:shadow-blue-100'
+                                           }`}
+                                       >
+                                           <span className={`text-2xl font-black ${isOccupied ? 'text-orange-800' : 'text-slate-700'}`}>
+                                               {tableNum}
+                                           </span>
+                                           
+                                           {isOccupied ? (
+                                               <div className="flex flex-col items-center mt-2 w-full">
+                                                   <span className="text-xs font-bold text-orange-600 bg-orange-100 px-2 py-0.5 rounded-full mb-1">
+                                                       ₹{getOrderTotal(activeOrder).toFixed(0)}
+                                                   </span>
+                                                   <span className="text-[10px] text-slate-500 flex items-center gap-1 font-mono">
+                                                       <Timer size={10} />
+                                                       {formatDistanceToNow(activeOrder.createdAt).replace('about ', '').replace(' minutes', 'm')}
+                                                   </span>
+                                               </div>
+                                           ) : (
+                                               <div className="mt-2 text-slate-300">
+                                                   <Utensils size={20} />
+                                               </div>
+                                           )}
+                                       </button>
+                                   );
+                               })}
+                           </div>
+                       </div>
+                   ))}
+               </div>
+
+               {/* Occupied Table Action Modal */}
+               {occupiedTableId && (
+                   <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm animate-in fade-in">
+                       <div className="bg-white p-6 rounded-2xl shadow-2xl w-96 max-w-sm">
+                           <div className="flex justify-between items-center mb-4">
+                               <h3 className="text-xl font-bold text-slate-800">Table {occupiedTableId} Options</h3>
+                               <button onClick={() => setOccupiedTableId(null)} className="text-slate-400 hover:text-slate-600"><X size={20}/></button>
+                           </div>
+                           <div className="space-y-3">
+                               <button 
+                                   onClick={() => handleOccupiedAction('add')}
+                                   className="w-full py-4 bg-blue-600 hover:bg-blue-700 text-white font-bold rounded-xl flex items-center justify-center gap-2 shadow-lg shadow-blue-200"
+                               >
+                                   <Plus size={20} /> Add Items / Repeat Order
+                               </button>
+                               <button 
+                                   onClick={() => handleOccupiedAction('settle')}
+                                   className="w-full py-4 bg-slate-800 hover:bg-slate-900 text-white font-bold rounded-xl flex items-center justify-center gap-2 shadow-lg"
+                               >
+                                   <Receipt size={20} /> View / Settle Bill
+                               </button>
+                               <button 
+                                   onClick={handleCancelOrder}
+                                   className="w-full py-4 bg-red-100 hover:bg-red-200 text-red-700 font-bold rounded-xl flex items-center justify-center gap-2 shadow-sm border border-red-200"
+                               >
+                                   <Ban size={20} /> Cancel Order & Clear
+                               </button>
+                           </div>
+                       </div>
+                   </div>
+               )}
+          </div>
+      );
+  };
+
   const renderNewOrderView = () => {
+    // ... existing renderNewOrderView logic ...
     const subtotal = calculateSubtotal();
     const discount = parseFloat(manualDiscount) || 0;
     const taxRate = parseFloat(manualTaxRate) || 0;
@@ -334,7 +624,8 @@ const POS: React.FC<POSProps> = ({ orders, menuItems, onPlaceOrder, onUpdatePaym
              </button>
         </div>
 
-        <div className="flex gap-2 overflow-x-auto no-scrollbar mb-4 pb-1">
+        {/* Main Categories */}
+        <div className="flex gap-2 flex-wrap mb-2 pb-1">
             {categories.map(cat => (
                 <button
                 key={cat}
@@ -350,6 +641,35 @@ const POS: React.FC<POSProps> = ({ orders, menuItems, onPlaceOrder, onUpdatePaym
             ))}
         </div>
 
+        {/* Sub Categories (Shown only if available for selected category) */}
+        {subCategories.length > 0 && (
+            <div className="flex gap-2 flex-wrap mb-4 pb-1 animate-in fade-in slide-in-from-top-1">
+                <button
+                    onClick={() => setSelectedSubCategory('All')}
+                    className={`px-3 py-1.5 rounded-full whitespace-nowrap text-xs font-bold transition-colors border ${
+                        selectedSubCategory === 'All'
+                        ? 'bg-slate-700 text-white border-slate-700'
+                        : 'bg-slate-50 text-slate-500 border-slate-200 hover:bg-slate-200'
+                    }`}
+                >
+                    All {selectedCategory}
+                </button>
+                {subCategories.map(sub => (
+                    <button
+                        key={sub}
+                        onClick={() => setSelectedSubCategory(sub)}
+                        className={`px-3 py-1.5 rounded-full whitespace-nowrap text-xs font-bold transition-colors border ${
+                            selectedSubCategory === sub
+                            ? 'bg-slate-700 text-white border-slate-700'
+                            : 'bg-white text-slate-500 border-slate-200 hover:bg-slate-50'
+                        }`}
+                    >
+                        {sub}
+                    </button>
+                ))}
+            </div>
+        )}
+
         <div className="grid grid-cols-2 md:grid-cols-3 xl:grid-cols-4 gap-3 lg:gap-4 overflow-y-auto pr-1 pb-20 lg:pb-4 flex-1 content-start">
           {filteredItems.map(item => {
             const isOutOfStock = item.available === false;
@@ -357,21 +677,24 @@ const POS: React.FC<POSProps> = ({ orders, menuItems, onPlaceOrder, onUpdatePaym
             <div
               key={item.id}
               onClick={() => !isOutOfStock && openPortionModal(item)}
-              className={`bg-white p-3 lg:p-4 rounded-xl shadow-sm border transition-all text-left flex flex-col h-32 justify-between group relative overflow-hidden ${
+              className={`bg-white p-3 lg:p-4 rounded-xl shadow-sm border transition-all text-left flex flex-col min-h-[140px] h-full justify-between group relative overflow-hidden ${
                   isOutOfStock 
                     ? 'border-slate-200 opacity-70 cursor-not-allowed bg-slate-50' 
                     : 'border-slate-200 hover:shadow-md hover:border-blue-300 cursor-pointer'
               }`}
             >
               <div>
-                <h3 className={`font-bold text-sm lg:text-base text-slate-800 leading-tight flex items-center gap-2 ${!isOutOfStock && 'group-hover:text-blue-600'}`}>
+                <h3 className={`font-bold text-sm lg:text-base text-slate-800 leading-tight flex flex-wrap items-center gap-2 ${!isOutOfStock && 'group-hover:text-blue-600'}`}>
                     {/* Visual Indicators for Veg/Non-Veg */}
                     {item.isVeg !== undefined && (
                          <span className={`min-w-3 w-3 h-3 rounded-full border ${item.isVeg ? 'border-green-600 bg-green-500' : 'border-red-600 bg-red-500'}`}></span>
                     )}
-                    <span className="truncate">{item.name}</span>
+                    <span className="break-words w-full">{item.name}</span>
                 </h3>
-                <p className="text-xs text-slate-500 mt-1 line-clamp-1">{item.description}</p>
+                <p className="text-xs text-slate-500 mt-1">
+                    {item.subCategory ? <span className="font-semibold text-slate-400">{item.subCategory} • </span> : ''}
+                    {item.description}
+                </p>
               </div>
               <div className="flex justify-between items-center mt-2 relative z-10">
                 <span className={`font-bold ${isOutOfStock ? 'text-slate-400' : 'text-slate-900'}`}>₹{item.price.toFixed(0)}</span>
@@ -381,13 +704,16 @@ const POS: React.FC<POSProps> = ({ orders, menuItems, onPlaceOrder, onUpdatePaym
                         <Ban size={10} /> SOLD OUT
                     </span>
                 ) : (
-                    <button
-                    onClick={(e) => handleQuickAdd(item, e)}
-                    className="w-8 h-8 rounded-full bg-blue-50 text-blue-600 flex items-center justify-center hover:bg-blue-600 hover:text-white transition-colors"
-                    title="Quick Add Full Portion"
-                    >
-                    <Plus size={16} />
-                    </button>
+                    // Only show Quick Add if Full portion is available
+                    getPortionPrice(item, 'Full') > 0 && (
+                        <button
+                        onClick={(e) => handleQuickAdd(item, e)}
+                        className="w-8 h-8 rounded-full bg-blue-50 text-blue-600 flex items-center justify-center hover:bg-blue-600 hover:text-white transition-colors"
+                        title="Quick Add Full Portion"
+                        >
+                        <Plus size={16} />
+                        </button>
+                    )
                 )}
               </div>
               
@@ -456,16 +782,24 @@ const POS: React.FC<POSProps> = ({ orders, menuItems, onPlaceOrder, onUpdatePaym
 
         <div className="p-5 border-b border-slate-100 hidden lg:block">
           <h2 className="text-xl font-bold text-slate-800 flex items-center gap-2">
-              <ShoppingCart size={20} /> Current Order
+              <ShoppingCart size={20} /> {editingOrder ? `Updating Order #${editingOrder.id.split('-')[1]}` : 'Current Order'}
           </h2>
-          <p className="text-sm text-slate-400">New Table (Guest)</p>
+          <div className="flex justify-between items-center mt-1">
+             <p className="text-sm font-semibold text-blue-600 bg-blue-50 px-2 py-0.5 rounded">
+                {selectedTable ? `Table #${selectedTable}` : 'Takeaway / Quick Order'}
+             </p>
+             {selectedTable && (
+                 <button onClick={() => { setSelectedTable(null); setEditingOrder(null); setActiveView('tables'); }} className="text-xs text-slate-400 underline hover:text-red-500">Change / Cancel</button>
+             )}
+          </div>
         </div>
         
         <div className="flex-1 overflow-y-auto p-4 space-y-3">
           {currentCart.length === 0 ? (
-            <div className="h-full flex flex-col items-center justify-center text-slate-400">
-              <ShoppingCart size={48} className="mb-2 opacity-50" />
-              <p>Basket is empty</p>
+            <div className="flex flex-col items-center justify-center py-8">
+              <ShoppingCart size={48} className="mb-2 text-slate-200" />
+              <p className="text-slate-400 text-sm mb-4">Basket is empty</p>
+              {selectedTable === null && <p className="text-xs text-blue-500 mb-4 cursor-pointer hover:underline" onClick={() => setActiveView('tables')}>Select a Table first?</p>}
             </div>
           ) : (
             currentCart.map(item => {
@@ -497,6 +831,51 @@ const POS: React.FC<POSProps> = ({ orders, menuItems, onPlaceOrder, onUpdatePaym
         </div>
 
         <div className="p-6 bg-slate-50 border-t border-slate-200 rounded-b-none lg:rounded-b-2xl space-y-3 pb-safe-area">
+          
+          {/* Custom Item Quick Add */}
+          <div className="mb-3 p-3 bg-white rounded-lg border border-slate-200 shadow-sm">
+              <div className="flex justify-between items-center mb-2">
+                  <span className="text-xs font-bold text-slate-500 uppercase flex items-center gap-1">
+                      <Zap size={12} className="text-yellow-500" /> Quick Custom Item
+                  </span>
+              </div>
+              <div className="space-y-2">
+                  <input 
+                      type="text" 
+                      placeholder="Item Name" 
+                      value={cartCustomName}
+                      onChange={e => setCartCustomName(e.target.value)}
+                      className="w-full px-2 py-1.5 text-xs border border-slate-200 rounded focus:ring-1 focus:ring-blue-500 outline-none"
+                  />
+                  <div className="flex gap-2">
+                      <div className="relative flex-1">
+                          <span className="absolute left-2 top-1.5 text-slate-400 text-xs">₹</span>
+                          <input 
+                              type="number" 
+                              placeholder="Price"
+                              value={cartCustomPrice}
+                              onChange={e => setCartCustomPrice(e.target.value)}
+                              className="w-full pl-5 pr-2 py-1.5 text-xs border border-slate-200 rounded focus:ring-1 focus:ring-blue-500 outline-none"
+                          />
+                      </div>
+                      <input 
+                          type="number" 
+                          placeholder="Qty"
+                          value={cartCustomQty}
+                          onChange={e => setCartCustomQty(e.target.value)}
+                          className="w-12 px-1 py-1.5 text-xs text-center border border-slate-200 rounded focus:ring-1 focus:ring-blue-500 outline-none"
+                      />
+                      <button 
+                          onClick={handleCartCustomAdd}
+                          disabled={!cartCustomName || !cartCustomPrice}
+                          className="bg-slate-800 text-white px-3 py-1.5 rounded text-xs font-bold hover:bg-slate-700 disabled:opacity-50"
+                      >
+                          Add
+                      </button>
+                  </div>
+              </div>
+          </div>
+
           {/* Discount & Tax Inputs */}
           <div className="grid grid-cols-2 gap-3 mb-2">
               <div>
@@ -546,22 +925,41 @@ const POS: React.FC<POSProps> = ({ orders, menuItems, onPlaceOrder, onUpdatePaym
           
           {/* Action Buttons */}
           {!showPaymentOptions ? (
-              <div className="grid grid-cols-2 gap-3 pt-2">
-                <button 
-                    onClick={() => setShowPaymentOptions(true)}
+              <div className="flex flex-col gap-2 pt-2">
+                <div className="grid grid-cols-2 gap-2">
+                    <button 
+                        onClick={() => setShowPaymentOptions(true)}
+                        disabled={currentCart.length === 0}
+                        className="flex items-center justify-center gap-2 py-3 rounded-lg border-2 border-green-500 text-green-700 bg-green-50 font-bold hover:bg-green-100 disabled:opacity-50"
+                    >
+                    <CreditCard size={18} /> Pay / Settle
+                    </button>
+                    <button 
+                    onClick={handleKitchenSend}
                     disabled={currentCart.length === 0}
-                    className="flex items-center justify-center gap-2 py-3 rounded-lg border-2 border-slate-200 font-medium text-slate-600 hover:bg-slate-100 disabled:opacity-50"
-                >
-                <CreditCard size={18} /> Pay Now
-                </button>
-                <button 
-                onClick={handleKitchenSend}
-                disabled={currentCart.length === 0}
-                className={`flex items-center justify-center gap-2 py-3 rounded-lg text-white font-medium shadow-lg transition-colors ${orderSentSuccess ? 'bg-green-600' : 'bg-blue-600 hover:bg-blue-700 disabled:opacity-50 shadow-blue-200'}`}
-                >
-                {orderSentSuccess ? <Check size={18} /> : <Send size={18} />}
-                {orderSentSuccess ? 'Sent!' : 'Send KDS'}
-                </button>
+                    className={`flex items-center justify-center gap-2 py-3 rounded-lg text-white font-bold shadow-lg transition-colors ${orderSentSuccess ? 'bg-green-600' : 'bg-blue-600 hover:bg-blue-700 disabled:opacity-50 shadow-blue-200'}`}
+                    >
+                    {orderSentSuccess ? <Check size={18} /> : <Send size={18} />}
+                    {orderSentSuccess ? 'Sent!' : (editingOrder ? 'Update Order' : 'Send KDS')}
+                    </button>
+                </div>
+                
+                <div className="grid grid-cols-2 gap-2">
+                    <button
+                        onClick={handleSkipBill}
+                        disabled={currentCart.length === 0}
+                        className="flex items-center justify-center gap-2 py-2 rounded-lg bg-slate-200 text-slate-700 text-xs font-bold hover:bg-slate-300 disabled:opacity-50"
+                    >
+                        <SkipForward size={14} /> Save & Skip
+                    </button>
+                    <button
+                        onClick={handlePrintOnly}
+                        disabled={currentCart.length === 0}
+                        className="flex items-center justify-center gap-2 py-2 rounded-lg bg-slate-200 text-slate-700 text-xs font-bold hover:bg-slate-300 disabled:opacity-50"
+                    >
+                        <Printer size={14} /> Print Bill
+                    </button>
+                </div>
             </div>
           ) : (
              <div className="space-y-3 animate-in fade-in slide-in-from-bottom-2">
@@ -592,9 +990,17 @@ const POS: React.FC<POSProps> = ({ orders, menuItems, onPlaceOrder, onUpdatePaym
           )}
         </div>
       </div>
+    </div>
+    );
+  };
 
-      {/* PORTION MODAL - REFINED SEGMENTED CONTROL */}
-      {portionItem && (
+  return (
+    <div className="h-full w-full relative">
+       {activeView === 'tables' && renderTablesView()}
+       {(activeView === 'new_order' || activeView === 'active_tables') && renderNewOrderView()}
+       
+       {/* Modals */}
+       {portionItem && (
           <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/50 backdrop-blur-sm animate-in fade-in duration-200">
               <div className="bg-white rounded-2xl shadow-2xl p-6 w-96 transform transition-all scale-100">
                   <div className="flex justify-between items-start mb-6">
@@ -617,25 +1023,28 @@ const POS: React.FC<POSProps> = ({ orders, menuItems, onPlaceOrder, onUpdatePaym
                       <div>
                           <label className="text-xs font-bold text-slate-500 uppercase mb-2 block">Portion Size</label>
                           <div className="flex p-1 bg-slate-100 rounded-xl">
-                            {(['Full', 'Half', 'Quarter'] as PortionType[]).map((type) => {
-                                const price = getPortionPrice(portionItem, type);
-                                const isSelected = selectedPortionType === type;
-                                return (
-                                    <button
-                                        key={type}
-                                        onClick={() => setSelectedPortionType(type)}
-                                        className={`flex-1 py-2 text-sm font-bold rounded-lg transition-all ${
-                                            isSelected
-                                            ? 'bg-white text-blue-600 shadow-sm ring-1 ring-black/5'
-                                            : 'text-slate-500 hover:text-slate-700'
-                                        }`}
-                                    >
-                                        <div className="flex flex-col items-center">
-                                            <span>{type}</span>
-                                            <span className="text-[10px] font-normal opacity-80">₹{price.toFixed(0)}</span>
-                                        </div>
-                                    </button>
-                                )
+                            {/* Force display of Full, Half, Quarter if price > 0 OR fallback logic exists */}
+                            {(['Full', 'Half', 'Quarter'] as PortionType[])
+                                .filter(type => getPortionPrice(portionItem, type) > 0)
+                                .map((type) => {
+                                    const price = getPortionPrice(portionItem, type);
+                                    const isSelected = selectedPortionType === type;
+                                    return (
+                                        <button
+                                            key={type}
+                                            onClick={() => setSelectedPortionType(type)}
+                                            className={`flex-1 py-2 text-sm font-bold rounded-lg transition-all ${
+                                                isSelected
+                                                ? 'bg-white text-blue-600 shadow-sm ring-1 ring-black/5'
+                                                : 'text-slate-500 hover:text-slate-700'
+                                            }`}
+                                        >
+                                            <div className="flex flex-col items-center">
+                                                <span>{type}</span>
+                                                <span className="text-[10px] font-normal opacity-80">₹{price.toFixed(0)}</span>
+                                            </div>
+                                        </button>
+                                    )
                             })}
                           </div>
                       </div>
@@ -669,10 +1078,9 @@ const POS: React.FC<POSProps> = ({ orders, menuItems, onPlaceOrder, onUpdatePaym
                   </div>
               </div>
           </div>
-      )}
+       )}
 
-      {/* CUSTOM ITEM MODAL */}
-      {showCustomItemModal && (
+       {showCustomItemModal && (
           <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/50 backdrop-blur-sm animate-in fade-in duration-200">
               <div className="bg-white rounded-2xl shadow-2xl p-6 w-80 transform transition-all scale-100">
                    <div className="flex justify-between items-center mb-4">
@@ -708,20 +1116,32 @@ const POS: React.FC<POSProps> = ({ orders, menuItems, onPlaceOrder, onUpdatePaym
                            </div>
                        </div>
 
-                       <div>
-                           <label className="block text-xs font-bold text-slate-500 mb-1">Total Price for this Portion (₹)</label>
-                           <div className="relative">
-                               <span className="absolute left-3 top-2 text-slate-400">₹</span>
+                       <div className="grid grid-cols-2 gap-2">
+                           <div>
+                               <label className="block text-xs font-bold text-slate-500 mb-1">Price (₹)</label>
+                               <div className="relative">
+                                   <span className="absolute left-2 top-2 text-slate-400 text-xs">₹</span>
+                                   <input 
+                                        type="number" 
+                                        value={customItemPrice} 
+                                        onChange={e => setCustomItemPrice(e.target.value)} 
+                                        className="w-full border rounded pl-5 pr-2 py-2 font-bold" 
+                                        placeholder="0" 
+                                   />
+                               </div>
+                           </div>
+                           <div>
+                               <label className="block text-xs font-bold text-slate-500 mb-1">Quantity</label>
                                <input 
                                     type="number" 
-                                    value={customItemPrice} 
-                                    onChange={e => setCustomItemPrice(e.target.value)} 
-                                    className="w-full border rounded pl-6 pr-3 py-2 font-bold" 
-                                    placeholder="0.00" 
+                                    value={customItemQty} 
+                                    onChange={e => setCustomItemQty(e.target.value)} 
+                                    className="w-full border rounded px-3 py-2 font-bold text-center" 
+                                    placeholder="1" 
                                />
                            </div>
-                           <p className="text-[10px] text-slate-400 mt-1">Enter the final price you want to charge.</p>
                        </div>
+                       
                        <button 
                             onClick={handleAddCustomItem} 
                             disabled={!customItemName || !customItemPrice}
@@ -732,10 +1152,9 @@ const POS: React.FC<POSProps> = ({ orders, menuItems, onPlaceOrder, onUpdatePaym
                    </div>
               </div>
           </div>
-      )}
+       )}
 
-      {/* PRINT BILL MODAL - OPTIMIZED FOR THERMAL PRINTING */}
-      {showPrintModal && printOrder && (
+       {showPrintModal && printOrder && (
           <div className="fixed inset-0 z-[70] flex items-center justify-center bg-black/60 backdrop-blur-sm animate-in fade-in">
               <div 
                   id="printable-receipt"
@@ -756,6 +1175,7 @@ const POS: React.FC<POSProps> = ({ orders, menuItems, onPlaceOrder, onUpdatePaym
                                   <input type="text" value={receiptDetails.address2} onChange={e => setReceiptDetails({...receiptDetails, address2: e.target.value})} className="w-full text-center text-[10px] border border-slate-300 p-1" />
                                   <input type="text" value={receiptDetails.phone} onChange={e => setReceiptDetails({...receiptDetails, phone: e.target.value})} className="w-full text-center text-[10px] border border-slate-300 p-1" />
                                   <input type="text" value={receiptDetails.gstin} onChange={e => setReceiptDetails({...receiptDetails, gstin: e.target.value})} className="w-full text-center text-[10px] border border-slate-300 p-1" placeholder="GSTIN" />
+                                  <input type="text" value={receiptDetails.fssai} onChange={e => setReceiptDetails({...receiptDetails, fssai: e.target.value})} className="w-full text-center text-[10px] border border-slate-300 p-1" placeholder="FSSAI" />
                                   <button onClick={saveReceiptDetails} className="w-full bg-blue-600 text-white py-1 rounded text-xs font-bold flex items-center justify-center gap-1"><Save size={12}/> Save</button>
                               </div>
                           ) : (
@@ -766,6 +1186,7 @@ const POS: React.FC<POSProps> = ({ orders, menuItems, onPlaceOrder, onUpdatePaym
                                   <p className="text-[10px]">{receiptDetails.address2}</p>
                                   <p className="text-[10px]">Ph: {receiptDetails.phone}</p>
                                   {receiptDetails.gstin && <p className="text-[10px]">GSTIN: {receiptDetails.gstin}</p>}
+                                  {receiptDetails.fssai && <p className="text-[10px]">FSSAI: {receiptDetails.fssai}</p>}
                                   
                                   <button onClick={() => setIsEditingReceipt(true)} className="absolute top-0 right-0 p-1 text-slate-300 hover:text-blue-500 opacity-0 group-hover:opacity-100 transition-opacity print-hidden">
                                       <Pencil size={12} />
@@ -783,7 +1204,7 @@ const POS: React.FC<POSProps> = ({ orders, menuItems, onPlaceOrder, onUpdatePaym
                          <span>T.No: {printOrder.tableNumber}</span>
                       </div>
                       <div className="text-[10px] text-left">
-                         Server: {printOrder.serverName}
+                         Cashier: {currentUserName}
                       </div>
                   </div>
 
@@ -827,7 +1248,7 @@ const POS: React.FC<POSProps> = ({ orders, menuItems, onPlaceOrder, onUpdatePaym
                       </div>
                       <div className="flex justify-between text-[10px] mt-1">
                           <span>Pay Mode:</span>
-                          <span className="uppercase">{printOrder.paymentMethod}</span>
+                          <span className="uppercase">{printOrder.paymentMethod || 'DRAFT'}</span>
                       </div>
                   </div>
 
@@ -846,245 +1267,7 @@ const POS: React.FC<POSProps> = ({ orders, menuItems, onPlaceOrder, onUpdatePaym
                   </div>
               </div>
           </div>
-      )}
-    </div>
-  )};
-
-  const renderActiveTablesView = () => {
-    // Show orders that are not PAID yet, but likely SERVED or READY
-    const activeOrders = orders.filter(o => o.paymentStatus === PaymentStatus.PENDING);
-    
-    return (
-        <div className="h-full bg-white rounded-xl shadow-sm border border-slate-200 flex flex-col overflow-hidden">
-             <div className="p-5 border-b border-slate-100 flex justify-between items-center bg-slate-50">
-                <h2 className="text-xl font-bold text-slate-800 flex items-center gap-2">
-                    <Clock size={20} className="text-orange-500"/> Active / Served Tables
-                </h2>
-                <span className="bg-orange-100 text-orange-700 text-xs font-bold px-3 py-1 rounded-full">{activeOrders.length} Active</span>
-            </div>
-            <div className="flex-1 overflow-auto p-4 lg:p-6">
-                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-                    {activeOrders.length === 0 ? (
-                        <div className="col-span-full flex flex-col items-center justify-center h-64 text-slate-400">
-                             <CheckCircle size={48} className="mb-2 opacity-20" />
-                             <p>No active unpaid orders.</p>
-                        </div>
-                    ) : (
-                        activeOrders.map(order => (
-                            <div key={order.id} className="bg-white border border-slate-200 rounded-xl shadow-sm hover:shadow-md transition-shadow flex flex-col overflow-hidden">
-                                <div className="p-4 bg-slate-50 border-b border-slate-100 flex justify-between items-start">
-                                    <div>
-                                        <h3 className="font-bold text-lg text-slate-800">Table #{order.tableNumber}</h3>
-                                        <p className="text-xs text-slate-500">Server: {order.serverName}</p>
-                                    </div>
-                                    <div className={`px-2 py-1 rounded text-xs font-bold uppercase ${
-                                        order.status === OrderStatus.SERVED ? 'bg-green-100 text-green-700' : 'bg-yellow-100 text-yellow-700'
-                                    }`}>
-                                        {order.status}
-                                    </div>
-                                </div>
-                                <div className="p-4 flex-1 space-y-2">
-                                    {order.items.map((item, idx) => {
-                                        const displayName = item.name || menuItems.find(m => m.id === item.menuItemId)?.name || 'Unknown Item';
-                                        return (
-                                            <div key={idx} className="flex justify-between text-sm">
-                                                <span className="text-slate-700">{item.quantity}x {displayName} <span className="text-xs text-blue-600 font-bold">({item.portion || 'Full'})</span></span>
-                                                <span className="font-mono text-slate-500">₹{(item.priceAtOrder * item.quantity).toFixed(2)}</span>
-                                            </div>
-                                        );
-                                    })}
-                                    {order.discount && order.discount > 0 && (
-                                        <div className="flex justify-between text-sm text-green-600 pt-1 border-t border-dashed border-slate-200">
-                                            <span>Discount</span>
-                                            <span>-₹{order.discount.toFixed(2)}</span>
-                                        </div>
-                                    )}
-                                    <div className="flex justify-between text-sm text-slate-500">
-                                        <span>Tax ({order.taxRate || 0}%)</span>
-                                        <span>₹{((calculateFinalTotal(order.items, order.taxRate, order.discount) - (order.items.reduce((a,b)=>a+(b.priceAtOrder*b.quantity),0) - (order.discount||0)))).toFixed(2)}</span>
-                                    </div>
-                                </div>
-                                <div className="p-4 bg-slate-50 border-t border-slate-100">
-                                    <div className="flex justify-between items-center mb-4">
-                                        <span className="font-bold text-slate-500 text-sm">Total Due</span>
-                                        <span className="font-bold text-xl text-slate-900">₹{getOrderTotal(order).toFixed(2)}</span>
-                                    </div>
-                                    
-                                    {settleOrderId === order.id ? (
-                                        <div className="grid grid-cols-2 gap-2 animate-in fade-in slide-in-from-bottom-2">
-                                            <button onClick={() => handlePayment(PaymentMethod.CASH, order.id)} className="bg-green-500 text-white py-2 rounded font-bold text-sm hover:bg-green-600">Cash</button>
-                                            <button onClick={() => handlePayment(PaymentMethod.ONLINE, order.id)} className="bg-purple-500 text-white py-2 rounded font-bold text-sm hover:bg-purple-600">Online</button>
-                                        </div>
-                                    ) : (
-                                        <button 
-                                            onClick={() => setSettleOrderId(order.id)}
-                                            className="w-full py-2 bg-slate-800 text-white font-bold rounded hover:bg-slate-700 transition-colors flex items-center justify-center gap-2"
-                                        >
-                                            <CreditCard size={16} /> Settle Bill
-                                        </button>
-                                    )}
-                                </div>
-                            </div>
-                        ))
-                    )}
-                </div>
-            </div>
-        </div>
-    );
-  };
-
-  const renderHistoryView = () => {
-    const paidOrders = orders.filter(o => o.paymentStatus === PaymentStatus.PAID).sort((a,b) => b.createdAt.getTime() - a.createdAt.getTime());
-    
-    // Served but not paid
-    const servedUnpaidOrders = orders.filter(o => o.status === OrderStatus.SERVED && o.paymentStatus === PaymentStatus.PENDING).sort((a,b) => {
-        const timeA = a.completedAt ? a.completedAt.getTime() : a.createdAt.getTime();
-        const timeB = b.completedAt ? b.completedAt.getTime() : b.createdAt.getTime();
-        return timeB - timeA;
-    });
-
-    return (
-        <div className="h-full bg-white rounded-xl shadow-sm border border-slate-200 flex flex-col overflow-hidden">
-             
-             {/* SERVED & UNPAID SECTION (NEW) */}
-             {servedUnpaidOrders.length > 0 && (
-                <div className="border-b-4 border-slate-100 flex-shrink-0">
-                    <div className="p-4 bg-orange-50 border-b border-orange-100 flex justify-between items-center">
-                        <h2 className="text-lg font-bold text-orange-800 flex items-center gap-2">
-                            <AlertCircle size={20}/> Served & Unpaid Orders
-                        </h2>
-                        <span className="text-xs font-medium text-orange-600">Action Required</span>
-                    </div>
-                    <div className="overflow-x-auto max-h-64">
-                         <table className="w-full text-left min-w-[600px]">
-                            <thead className="bg-orange-50/50">
-                                <tr>
-                                    <th className="px-6 py-2 text-xs font-bold text-orange-800/60 uppercase">Order ID</th>
-                                    <th className="px-6 py-2 text-xs font-bold text-orange-800/60 uppercase">Served Time</th>
-                                    <th className="px-6 py-2 text-xs font-bold text-orange-800/60 uppercase">Table</th>
-                                    <th className="px-6 py-2 text-xs font-bold text-orange-800/60 uppercase">Amount Due</th>
-                                    <th className="px-6 py-2 text-xs font-bold text-orange-800/60 uppercase text-right">Action</th>
-                                </tr>
-                            </thead>
-                            <tbody className="divide-y divide-orange-100">
-                                {servedUnpaidOrders.map(order => (
-                                    <tr key={order.id} className="hover:bg-orange-50/30">
-                                        <td className="px-6 py-3 text-xs font-mono text-slate-500">#{order.id}</td>
-                                        <td className="px-6 py-3 text-sm font-medium text-slate-800">
-                                            {order.completedAt ? format(order.completedAt, 'HH:mm') : 'N/A'}
-                                        </td>
-                                        <td className="px-6 py-3 text-sm text-slate-800">Table {order.tableNumber}</td>
-                                        <td className="px-6 py-3 font-bold text-slate-900">₹{getOrderTotal(order).toFixed(2)}</td>
-                                        <td className="px-6 py-3 text-right">
-                                            <button 
-                                                onClick={() => { setActiveView('active_tables'); setSettleOrderId(order.id); }}
-                                                className="text-xs bg-white border border-slate-200 px-3 py-1 rounded font-bold text-slate-600 hover:text-blue-600 hover:border-blue-300"
-                                            >
-                                                Go to Pay
-                                            </button>
-                                        </td>
-                                    </tr>
-                                ))}
-                            </tbody>
-                         </table>
-                    </div>
-                </div>
-             )}
-
-             {/* PAID HISTORY SECTION */}
-             <div className="p-5 border-b border-slate-100 flex justify-between items-center bg-slate-50 flex-wrap gap-2">
-                <h2 className="text-xl font-bold text-slate-800 flex items-center gap-2">
-                    <Receipt size={20} className="text-green-600"/> Transaction History
-                </h2>
-                <div className="flex gap-2">
-                    <span className="bg-green-100 text-green-700 text-xs font-bold px-3 py-1 rounded-full">{paidOrders.length} Paid</span>
-                </div>
-            </div>
-            <div className="flex-1 overflow-auto">
-                <table className="w-full text-left min-w-[700px]">
-                    <thead className="bg-white border-b border-slate-200 sticky top-0 shadow-sm">
-                        <tr>
-                            <th className="px-6 py-4 font-semibold text-slate-600 text-sm">Order ID</th>
-                            <th className="px-6 py-4 font-semibold text-slate-600 text-sm">Date/Time</th>
-                            <th className="px-6 py-4 font-semibold text-slate-600 text-sm">Table</th>
-                            <th className="px-6 py-4 font-semibold text-slate-600 text-sm">Items</th>
-                            <th className="px-6 py-4 font-semibold text-slate-600 text-sm">Total</th>
-                            <th className="px-6 py-4 font-semibold text-slate-600 text-sm text-right">Method</th>
-                            <th className="px-6 py-4 font-semibold text-slate-600 text-sm text-right">Print</th>
-                        </tr>
-                    </thead>
-                    <tbody className="divide-y divide-slate-100">
-                        {paidOrders.map(order => (
-                            <tr key={order.id} className="hover:bg-slate-50">
-                                <td className="px-6 py-4 text-xs font-mono text-slate-500">#{order.id}</td>
-                                <td className="px-6 py-4 text-sm text-slate-800">{format(order.createdAt, 'MMM dd, HH:mm')}</td>
-                                <td className="px-6 py-4 text-sm text-slate-800">Table {order.tableNumber}</td>
-                                <td className="px-6 py-4 text-sm text-slate-500 max-w-xs truncate">
-                                    {order.items.map(i => {
-                                         const displayName = i.name || menuItems.find(x => x.id === i.menuItemId)?.name || 'Custom Item';
-                                         return `${i.quantity}x ${displayName} (${i.portion || 'Full'})`; 
-                                    }).join(', ')}
-                                </td>
-                                <td className="px-6 py-4 font-bold text-slate-900">₹{getOrderTotal(order).toFixed(2)}</td>
-                                <td className="px-6 py-4 text-right">
-                                    <span className={`px-2 py-1 rounded text-xs font-bold uppercase ${
-                                        order.paymentMethod === PaymentMethod.ONLINE ? 'bg-purple-100 text-purple-700' : 'bg-green-100 text-green-700'
-                                    }`}>
-                                        {order.paymentMethod}
-                                    </span>
-                                </td>
-                                <td className="px-6 py-4 text-right">
-                                    <button 
-                                        onClick={() => {
-                                            setPrintOrder(order);
-                                            setShowPrintModal(true);
-                                        }}
-                                        className="p-1 text-slate-400 hover:text-slate-800"
-                                        title="Print Bill"
-                                    >
-                                        <Printer size={16} />
-                                    </button>
-                                </td>
-                            </tr>
-                        ))}
-                    </tbody>
-                </table>
-            </div>
-        </div>
-    );
-  };
-
-  return (
-    <div className="h-full flex flex-col gap-4">
-        {/* Navigation Tabs */}
-        <div className="flex bg-white p-2 rounded-xl border border-slate-200 shadow-sm w-full md:w-fit overflow-x-auto no-scrollbar">
-            <button 
-                onClick={() => setActiveView('new_order')}
-                className={`px-4 py-2 rounded-lg text-sm font-bold flex items-center gap-2 transition-colors whitespace-nowrap ${activeView === 'new_order' ? 'bg-slate-800 text-white' : 'text-slate-500 hover:text-slate-800 hover:bg-slate-100'}`}
-            >
-                <Plus size={16} /> New Order
-            </button>
-            <div className="w-px bg-slate-200 mx-2 my-1 hidden md:block"></div>
-            <button 
-                onClick={() => setActiveView('active_tables')}
-                className={`px-4 py-2 rounded-lg text-sm font-bold flex items-center gap-2 transition-colors whitespace-nowrap ${activeView === 'active_tables' ? 'bg-orange-500 text-white' : 'text-slate-500 hover:text-orange-600 hover:bg-orange-50'}`}
-            >
-                <Clock size={16} /> Active / Served
-            </button>
-            <button 
-                onClick={() => setActiveView('history')}
-                className={`px-4 py-2 rounded-lg text-sm font-bold flex items-center gap-2 transition-colors whitespace-nowrap ${activeView === 'history' ? 'bg-green-600 text-white' : 'text-slate-500 hover:text-green-700 hover:bg-green-50'}`}
-            >
-                <RotateCcw size={16} /> History
-            </button>
-        </div>
-
-        {/* Main Content Area */}
-        <div className="flex-1 overflow-hidden">
-            {activeView === 'new_order' && renderNewOrderView()}
-            {activeView === 'active_tables' && renderActiveTablesView()}
-            {activeView === 'history' && renderHistoryView()}
-        </div>
+       )}
     </div>
   );
 };

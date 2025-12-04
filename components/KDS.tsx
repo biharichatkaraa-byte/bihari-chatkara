@@ -1,7 +1,7 @@
 
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useRef } from 'react';
 import { Order, OrderStatus, MenuItem, UserRole } from '../types';
-import { Clock, CheckCircle, Flame, AlertCircle, Lock, AlertTriangle, ChefHat, BookOpen, X, Sparkles, Loader2, Info } from 'lucide-react';
+import { Clock, CheckCircle, Flame, AlertCircle, Lock, AlertTriangle, ChefHat, BookOpen, X, Sparkles, Loader2, Info, Volume2, VolumeX } from 'lucide-react';
 import { formatDistanceToNow } from 'date-fns';
 import { generateChefRecipe } from '../services/geminiService';
 
@@ -15,6 +15,7 @@ interface KDSProps {
 const KDS: React.FC<KDSProps> = ({ orders, updateOrderStatus, userRole, menuItems }) => {
   const [now, setNow] = useState(new Date());
   const [confirmationOrder, setConfirmationOrder] = useState<{ order: Order, nextStatus: OrderStatus } | null>(null);
+  const [isSoundEnabled, setIsSoundEnabled] = useState(false);
   
   // Chef AI State
   const [showRecipeModal, setShowRecipeModal] = useState(false);
@@ -23,18 +24,50 @@ const KDS: React.FC<KDSProps> = ({ orders, updateOrderStatus, userRole, menuItem
   const [recipeResult, setRecipeResult] = useState('');
   const [isGeneratingRecipe, setIsGeneratingRecipe] = useState(false);
 
+  // Sound Logic
+  const audioRef = useRef<HTMLAudioElement | null>(null);
+
   useEffect(() => {
     const timer = setInterval(() => setNow(new Date()), 1000 * 60); // Update every minute for relative time
     return () => clearInterval(timer);
   }, []);
+
+  // Check for New Orders and Play Sound loop
+  useEffect(() => {
+      if (!isSoundEnabled) return;
+
+      const hasNewOrders = orders.some(o => o.status === OrderStatus.NEW);
+      let interval: any = null;
+
+      if (hasNewOrders) {
+          // Play immediately
+          playAlertSound();
+          // Loop every 5 seconds until accepted
+          interval = setInterval(() => {
+              playAlertSound();
+          }, 5000);
+      }
+
+      return () => {
+          if (interval) clearInterval(interval);
+      }
+  }, [orders, isSoundEnabled]);
+
+  const playAlertSound = () => {
+      if (audioRef.current) {
+          audioRef.current.currentTime = 0;
+          audioRef.current.play().catch(e => console.log("Audio play failed (interaction needed)", e));
+      }
+  };
 
   const canManageOrders = userRole === UserRole.MANAGER || userRole === UserRole.CHEF;
 
   const getTicketColor = (createdAt: Date, status: OrderStatus) => {
     if (status === OrderStatus.READY) return 'border-green-500 bg-green-50';
     const mins = (now.getTime() - createdAt.getTime()) / 60000;
-    // Critical: Flash Red if > 15 mins and not served/ready
-    if (mins > 15 && status !== OrderStatus.SERVED) return 'border-red-500 bg-red-50 animate-flash-red';
+    
+    // Prioritization Logic: Flash Red if > 15 mins (Urgent/Late)
+    if (mins > 15 && status !== OrderStatus.SERVED) return 'border-red-500 bg-red-50 animate-flash-red ring-4 ring-red-200';
     if (mins > 15) return 'border-red-500 bg-red-50'; // Static red if ready but old?
     if (mins > 10) return 'border-yellow-500 bg-yellow-50';
     return 'border-blue-200 bg-white';
@@ -42,7 +75,7 @@ const KDS: React.FC<KDSProps> = ({ orders, updateOrderStatus, userRole, menuItem
 
   const getStatusBadge = (status: OrderStatus) => {
     switch (status) {
-      case OrderStatus.NEW: return <span className="bg-blue-100 text-blue-700 px-2 py-0.5 rounded text-xs font-bold uppercase">New</span>;
+      case OrderStatus.NEW: return <span className="bg-blue-100 text-blue-700 px-2 py-0.5 rounded text-xs font-bold uppercase animate-pulse">New</span>;
       case OrderStatus.IN_PROGRESS: return <span className="bg-yellow-100 text-yellow-700 px-2 py-0.5 rounded text-xs font-bold uppercase flex items-center gap-1"><Flame size={10} /> Cooking</span>;
       case OrderStatus.READY: return <span className="bg-green-100 text-green-700 px-2 py-0.5 rounded text-xs font-bold uppercase flex items-center gap-1"><CheckCircle size={10} /> Ready</span>;
       default: return null;
@@ -50,7 +83,7 @@ const KDS: React.FC<KDSProps> = ({ orders, updateOrderStatus, userRole, menuItem
   };
 
   const handleAction = (order: Order, nextStatus: OrderStatus) => {
-      // Require confirmation for finishing actions
+      // Require confirmation for finishing actions (To prevent accidental deletion/loss)
       if (nextStatus === OrderStatus.READY || nextStatus === OrderStatus.SERVED) {
           setConfirmationOrder({ order, nextStatus });
       } else {
@@ -78,16 +111,31 @@ const KDS: React.FC<KDSProps> = ({ orders, updateOrderStatus, userRole, menuItem
 
   return (
     <div className="h-full flex flex-col relative">
+        {/* Simple beep sound source */}
+        <audio ref={audioRef} src="data:audio/wav;base64,UklGRl9vT19XQVZFZm10IBAAAAABAAEAQB8AAEAfAAABAAgAZGF0YU" />
+
         <div className="flex justify-between items-center mb-4">
-            {!canManageOrders ? (
-                <div className="bg-yellow-50 border border-yellow-200 px-4 py-2 rounded-lg text-yellow-800 text-sm flex items-center justify-center gap-2">
-                    <Lock size={14} /> View Only Mode: Only Chefs and Managers can update order status.
-                </div>
-            ) : (
-                <div className="text-sm text-slate-500 font-medium">
-                    Kitchen Display System • {activeOrders.length} Active Tickets
-                </div>
-            )}
+            <div className="flex items-center gap-4">
+                {!canManageOrders ? (
+                    <div className="bg-yellow-50 border border-yellow-200 px-4 py-2 rounded-lg text-yellow-800 text-sm flex items-center justify-center gap-2">
+                        <Lock size={14} /> View Only Mode: Only Chefs and Managers can update order status.
+                    </div>
+                ) : (
+                    <div className="text-sm text-slate-500 font-medium">
+                        Kitchen Display System • {activeOrders.length} Active Tickets
+                    </div>
+                )}
+                
+                {/* Sound Toggle */}
+                <button 
+                    onClick={() => setIsSoundEnabled(!isSoundEnabled)}
+                    className={`flex items-center gap-2 px-3 py-1.5 rounded-lg text-xs font-bold border transition-colors ${isSoundEnabled ? 'bg-green-100 text-green-700 border-green-200' : 'bg-slate-100 text-slate-500 border-slate-200'}`}
+                    title="Enable Kitchen Ring for New Orders"
+                >
+                    {isSoundEnabled ? <Volume2 size={16} /> : <VolumeX size={16} />}
+                    {isSoundEnabled ? 'Alerts On' : 'Alerts Off'}
+                </button>
+            </div>
             
             <button 
                 onClick={() => setShowRecipeModal(true)}
@@ -110,7 +158,7 @@ const KDS: React.FC<KDSProps> = ({ orders, updateOrderStatus, userRole, menuItem
             {activeOrders.map(order => (
                 <div 
                 key={order.id} 
-                className={`w-80 flex-shrink-0 border-t-4 rounded-lg shadow-sm flex flex-col ${getTicketColor(order.createdAt, order.status)} transition-colors duration-300`}
+                className={`w-80 flex-shrink-0 border-t-4 rounded-lg shadow-sm flex flex-col ${getTicketColor(order.createdAt, order.status)} transition-all duration-500 transform animate-in slide-in-from-right-4 fade-in`}
                 style={{ maxHeight: '75vh' }}
                 >
                 <div className="p-4 border-b border-black/5">
@@ -195,7 +243,7 @@ const KDS: React.FC<KDSProps> = ({ orders, updateOrderStatus, userRole, menuItem
             </div>
         </div>
 
-        {/* Confirmation Modal */}
+        {/* Confirmation Modal (Safety Dialog) */}
         {confirmationOrder && (
             <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm animate-in fade-in">
                 <div className="bg-white rounded-2xl shadow-2xl p-6 w-96 max-w-lg">

@@ -8,6 +8,7 @@ interface InventoryProps {
   ingredients: Ingredient[];
   menuItems: MenuItem[];
   onSave: (ingredients: Ingredient[]) => void;
+  onDeleteIngredient: (id: string) => void;
   onAddMenuItem: (item: MenuItem) => void;
   onUpdateMenuItem: (item: MenuItem) => void;
   onDeleteMenuItem: (id: string) => void;
@@ -24,6 +25,7 @@ const Inventory: React.FC<InventoryProps> = ({
     ingredients, 
     menuItems, 
     onSave, 
+    onDeleteIngredient,
     onAddMenuItem,
     onUpdateMenuItem,
     onDeleteMenuItem,
@@ -50,6 +52,10 @@ const Inventory: React.FC<InventoryProps> = ({
   const [newMenuName, setNewMenuName] = useState('');
   const [newMenuPrice, setNewMenuPrice] = useState('');
   const [newMenuCategory, setNewMenuCategory] = useState('');
+  const [newMenuSubCategory, setNewMenuSubCategory] = useState('');
+  const [newMenuPortionQuarter, setNewMenuPortionQuarter] = useState('');
+  const [newMenuPortionHalf, setNewMenuPortionHalf] = useState('');
+  const [newMenuPortionFull, setNewMenuPortionFull] = useState('');
 
   // Stock View State
   const [localIngredients, setLocalIngredients] = useState<Ingredient[]>(ingredients);
@@ -174,16 +180,28 @@ const Inventory: React.FC<InventoryProps> = ({
   };
 
   const handleAddMenuItem = () => {
-      if(!newMenuName || !newMenuPrice) {
-          alert("Please enter Item Name and Price.");
+      if(!newMenuName) {
+          alert("Please enter Item Name.");
           return;
       }
       
+      const full = parseFloat(newMenuPortionFull);
+      const half = parseFloat(newMenuPortionHalf);
+      const quarter = parseFloat(newMenuPortionQuarter);
+      const manualPrice = parseFloat(newMenuPrice);
+
       const newItem: MenuItem = {
           id: `m-${Date.now()}`,
           name: newMenuName,
           category: newMenuCategory || 'Specials',
-          price: parseFloat(newMenuPrice),
+          subCategory: newMenuSubCategory,
+          // If a Full portion price is given, use it as main price, else fallback to manual input or 0
+          price: !isNaN(full) && full > 0 ? full : (!isNaN(manualPrice) ? manualPrice : 0),
+          portionPrices: {
+              full: !isNaN(full) ? full : undefined,
+              half: !isNaN(half) ? half : undefined,
+              quarter: !isNaN(quarter) ? quarter : undefined
+          },
           ingredients: [],
           description: 'Manually added item',
           tags: [],
@@ -195,6 +213,10 @@ const Inventory: React.FC<InventoryProps> = ({
       setNewMenuName('');
       setNewMenuPrice('');
       setNewMenuCategory('');
+      setNewMenuSubCategory('');
+      setNewMenuPortionQuarter('');
+      setNewMenuPortionHalf('');
+      setNewMenuPortionFull('');
   };
 
   const handleSort = (key: SortKey) => {
@@ -245,9 +267,8 @@ const Inventory: React.FC<InventoryProps> = ({
   const handleBulkDelete = () => {
       if (selectedIds.size === 0) return;
       if (confirm(`Are you sure you want to PERMANENTLY delete ${selectedIds.size} inventory items? This cannot be undone.`)) {
-          const remainingIngredients = localIngredients.filter(i => !selectedIds.has(i.id));
-          setLocalIngredients(remainingIngredients);
-          onSave(remainingIngredients);
+          // Perform actual deletion via prop
+          Array.from(selectedIds).forEach(id => onDeleteIngredient(id));
           setSelectedIds(new Set());
           setHasUnsavedChanges(false);
       }
@@ -294,10 +315,18 @@ const Inventory: React.FC<InventoryProps> = ({
       setSelectedMenuIds(new Set());
   };
 
-  const handleMenuDeleteSingle = (id: string) => {
+  const handleMenuDeleteSingle = (id: string, e?: React.MouseEvent) => {
+      if (e) e.stopPropagation();
       if (confirm('Are you sure you want to delete this item?')) {
           onDeleteMenuItem(id);
           if (selectedItem?.id === id) setSelectedItem(null);
+      }
+  };
+
+  const handleStockDeleteSingle = (id: string) => {
+      if (confirm('Are you sure you want to delete this ingredient?')) {
+          onDeleteIngredient(id);
+          setLocalIngredients(prev => prev.filter(i => i.id !== id));
       }
   };
 
@@ -337,17 +366,19 @@ const Inventory: React.FC<InventoryProps> = ({
 
   // Menu CSV Export & Import Logic (Same as before)
   const handleMenuExportCSV = () => {
-      const headers = "category_id,subcategory_id,name,price_quarter,price_half,price_full,is_veg_or_nonveg,description\n";
+      const headers = "category_id,subcategory_id,category,sub_category,name,price_quarter,price_half,price_full,is_veg_or_nonveg,description\n";
       const csvContent = menuItems.map(item => {
           const catId = item.categoryId || '';
           const subCatId = item.subCategoryId || '';
+          const catName = (item.category || '').replace(/"/g, '""');
+          const subCatName = (item.subCategory || '').replace(/"/g, '""');
           const safeName = item.name.replace(/"/g, '""');
           const priceFull = item.portionPrices?.full || item.price || 0;
           const priceHalf = item.portionPrices?.half || '';
           const priceQuarter = item.portionPrices?.quarter || '';
           const isVeg = item.isVeg ? 'veg' : 'nonveg';
           const safeDesc = (item.description || '').replace(/"/g, '""');
-          return `${catId},${subCatId},"${safeName}",${priceQuarter},${priceHalf},${priceFull},${isVeg},"${safeDesc}"`;
+          return `${catId},${subCatId},"${catName}","${subCatName}","${safeName}",${priceQuarter},${priceHalf},${priceFull},${isVeg},"${safeDesc}"`;
       }).join("\n");
 
       const encodedUri = encodeURI("data:text/csv;charset=utf-8," + headers + csvContent);
@@ -374,7 +405,7 @@ const Inventory: React.FC<InventoryProps> = ({
               const headers = headerLine.split(',').map(h => h.trim());
 
               if (!headerLine.includes('name') || (!headerLine.includes('price_full') && !headerLine.includes('price'))) {
-                  alert('Invalid CSV format. Header must contain: name, price_full, etc.');
+                  alert('Invalid CSV format. Header must contain: name, price_full (or price), category, etc.');
                   return;
               }
 
@@ -383,6 +414,7 @@ const Inventory: React.FC<InventoryProps> = ({
               for (let i = 1; i < lines.length; i++) {
                   const line = lines[i].trim();
                   if (!line) continue;
+                  // Handle commas inside quotes
                   const values = line.split(/,(?=(?:(?:[^"]*"){2})*[^"]*$)/).map(v => v.replace(/^"|"$/g, '').trim());
                   
                   const getVal = (headerName: string) => {
@@ -399,6 +431,7 @@ const Inventory: React.FC<InventoryProps> = ({
                   const vegStatus = getVal('is_veg_or_nonveg');
                   const description = getVal('description');
                   const categoryName = getVal('category') || 'Imported';
+                  const subCategoryName = getVal('sub_category') || getVal('subcategory') || getVal('sub category') || '';
 
                   const priceFull = parseFloat(priceFullRaw) || 0;
                   const priceHalf = priceHalfRaw ? parseFloat(priceHalfRaw) : undefined;
@@ -419,6 +452,7 @@ const Inventory: React.FC<InventoryProps> = ({
                           subCategoryId: subCatId,
                           name,
                           category: categoryName,
+                          subCategory: subCategoryName,
                           price: priceFull,
                           portionPrices: { full: priceFull, half: priceHalf, quarter: priceQuarter },
                           isVeg: isVeg,
@@ -675,7 +709,7 @@ const Inventory: React.FC<InventoryProps> = ({
                           <button 
                               onClick={handleMenuBulkCategoryUpdate}
                               disabled={!bulkMenuCategory}
-                              className="text-xs bg-blue-600 hover:bg-blue-500 disabled:opacity-50 px-3 py-1.5 rounded font-bold"
+                              className="text-xs bg-blue-600 hover:bg-blue-50 disabled:opacity-50 px-3 py-1.5 rounded font-bold"
                           >
                               Update
                           </button>
@@ -742,6 +776,18 @@ const Inventory: React.FC<InventoryProps> = ({
                                     {isSelected ? <CheckSquare size={20} className="text-blue-600" /> : <Square size={20} />}
                                 </button>
                             </div>
+                            
+                            {/* Delete Button (Card) */}
+                            <div className="absolute top-4 right-12 z-10" onClick={(e) => e.stopPropagation()}>
+                                <button 
+                                    onClick={(e) => handleMenuDeleteSingle(item.id, e)}
+                                    className="p-1.5 rounded-md bg-white/80 hover:bg-red-100 text-slate-400 hover:text-red-500 transition-colors"
+                                    title="Delete Item"
+                                >
+                                    <Trash2 size={16} />
+                                </button>
+                            </div>
+
                             <div className="absolute top-4 right-4 z-10" onClick={(e) => e.stopPropagation()}>
                                 <button 
                                     onClick={(e) => handleMenuToggleAvailability(item, e)}
@@ -751,7 +797,7 @@ const Inventory: React.FC<InventoryProps> = ({
                                 </button>
                             </div>
 
-                            <div className="pl-8 flex justify-between items-start mb-2 pr-8">
+                            <div className="pl-8 flex justify-between items-start mb-2 pr-20">
                                 <div>
                                     <h3 className={`font-bold text-slate-800 flex items-center gap-2 ${isOutOfStock ? 'line-through decoration-slate-400' : ''}`}>
                                         {item.name}
@@ -760,7 +806,10 @@ const Inventory: React.FC<InventoryProps> = ({
                                         )}
                                         {isOutOfStock && <span className="text-[10px] bg-red-100 text-red-600 px-2 py-0.5 rounded-full no-underline">Sold Out</span>}
                                     </h3>
-                                    <p className="text-xs text-slate-500">{item.category}</p>
+                                    <p className="text-xs text-slate-500">
+                                        {item.category} 
+                                        {item.subCategory && <span className="text-slate-400"> • {item.subCategory}</span>}
+                                    </p>
                                 </div>
                                 <span className="font-mono font-bold text-slate-900">₹{item.price.toFixed(2)}</span>
                             </div>
@@ -866,6 +915,7 @@ const Inventory: React.FC<InventoryProps> = ({
         </div>
       ) : (
         <div className="bg-white rounded-xl shadow-sm border border-slate-200 flex-1 flex flex-col overflow-hidden">
+          {/* ... (Existing Bulk Action Bar) ... */}
           {selectedIds.size > 0 ? (
              <div className="p-4 border-b border-blue-500 flex justify-between items-center bg-slate-800 text-white flex-wrap gap-4 animate-in slide-in-from-top-2 shadow-md z-20">
                  <div className="flex items-center gap-6">
@@ -947,6 +997,7 @@ const Inventory: React.FC<InventoryProps> = ({
                   <SortableHeader label="Stock Qty" columnKey="stockQuantity" />
                   <SortableHeader label="Total Value" columnKey="totalValue" />
                   <th className="px-6 py-3 text-xs font-bold text-slate-500 uppercase tracking-wider">Status</th>
+                  <th className="px-6 py-3 w-12"></th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100">
@@ -972,6 +1023,11 @@ const Inventory: React.FC<InventoryProps> = ({
                     <td className="px-6 py-4 text-slate-700 font-mono">₹{(ing.unitCost * ing.stockQuantity).toFixed(2)}</td>
                     <td className="px-6 py-4">
                        {ing.stockQuantity < 50 ? <span className="inline-flex items-center gap-1 px-2 py-1 rounded text-xs font-bold bg-red-100 text-red-700 border border-red-200"><AlertTriangle size={12} /> Low Stock</span> : <span className="inline-flex items-center px-2 py-1 rounded text-xs font-bold bg-green-100 text-green-700 border border-green-200">In Stock</span>}
+                    </td>
+                    <td className="px-6 py-4">
+                        <button onClick={() => handleStockDeleteSingle(ing.id)} className="text-slate-300 hover:text-red-500 transition-colors p-1 rounded-md hover:bg-red-50">
+                            <Trash2 size={16} />
+                        </button>
                     </td>
                   </tr>
                 ))}
@@ -1013,15 +1069,29 @@ const Inventory: React.FC<InventoryProps> = ({
 
       {showAddMenuModal && (
           <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm animate-in fade-in">
-              <div className="bg-white rounded-2xl shadow-xl p-6 w-full max-w-md m-4">
+              <div className="bg-white rounded-2xl shadow-xl p-6 w-full max-w-lg m-4 max-h-[90vh] overflow-y-auto">
                   <div className="flex justify-between items-center mb-4">
                       <h3 className="text-lg font-bold text-slate-800">Add Menu Item</h3>
                       <button onClick={() => setShowAddMenuModal(false)} className="text-slate-400 hover:text-slate-600"><X size={20} /></button>
                   </div>
                   <div className="space-y-4">
-                      <div><label className="block text-sm font-medium text-slate-700 mb-1">Item Name</label><input type="text" value={newMenuName} onChange={e => setNewMenuName(e.target.value)} className="w-full px-3 py-2 border rounded-lg" placeholder="e.g. Special Pasta" /></div>
-                      <div><label className="block text-sm font-medium text-slate-700 mb-1">Category</label><input type="text" value={newMenuCategory} onChange={e => setNewMenuCategory(e.target.value)} className="w-full px-3 py-2 border rounded-lg" placeholder="Mains" /></div>
-                      <div><label className="block text-sm font-medium text-slate-700 mb-1">Price (₹)</label><input type="number" value={newMenuPrice} onChange={e => setNewMenuPrice(e.target.value)} className="w-full px-3 py-2 border rounded-lg" placeholder="0.00" /></div>
+                      <div><label className="block text-sm font-medium text-slate-700 mb-1">Item Name *</label><input type="text" value={newMenuName} onChange={e => setNewMenuName(e.target.value)} className="w-full px-3 py-2 border rounded-lg" placeholder="e.g. Special Pasta" /></div>
+                      <div className="grid grid-cols-2 gap-4">
+                          <div><label className="block text-sm font-medium text-slate-700 mb-1">Category</label><input type="text" value={newMenuCategory} onChange={e => setNewMenuCategory(e.target.value)} className="w-full px-3 py-2 border rounded-lg" placeholder="e.g. Mains" /></div>
+                          <div><label className="block text-sm font-medium text-slate-700 mb-1">Sub Category</label><input type="text" value={newMenuSubCategory} onChange={e => setNewMenuSubCategory(e.target.value)} className="w-full px-3 py-2 border rounded-lg" placeholder="e.g. Veg / Non Veg" /></div>
+                      </div>
+                      
+                      <div className="bg-slate-50 p-4 rounded-lg border border-slate-200">
+                          <label className="block text-sm font-bold text-slate-700 mb-3 uppercase text-xs">Pricing & Portions (₹)</label>
+                          <div className="grid grid-cols-3 gap-3">
+                              <div><label className="block text-xs text-slate-500 mb-1">Quarter</label><input type="number" value={newMenuPortionQuarter} onChange={e => setNewMenuPortionQuarter(e.target.value)} className="w-full px-2 py-1.5 border rounded text-sm" placeholder="0" /></div>
+                              <div><label className="block text-xs text-slate-500 mb-1">Half</label><input type="number" value={newMenuPortionHalf} onChange={e => setNewMenuPortionHalf(e.target.value)} className="w-full px-2 py-1.5 border rounded text-sm" placeholder="0" /></div>
+                              <div><label className="block text-xs text-slate-500 mb-1">Full</label><input type="number" value={newMenuPortionFull} onChange={e => setNewMenuPortionFull(e.target.value)} className="w-full px-2 py-1.5 border rounded text-sm font-bold" placeholder="0" /></div>
+                          </div>
+                      </div>
+
+                      <div><label className="block text-sm font-medium text-slate-700 mb-1">Manual Base Price (Fallback)</label><input type="number" value={newMenuPrice} onChange={e => setNewMenuPrice(e.target.value)} className="w-full px-3 py-2 border rounded-lg" placeholder="0.00" /></div>
+                      
                       <div className="pt-2"><button onClick={handleAddMenuItem} className="w-full py-2 bg-blue-600 text-white rounded-lg font-bold hover:bg-blue-700">Add Item to Menu</button></div>
                   </div>
               </div>
