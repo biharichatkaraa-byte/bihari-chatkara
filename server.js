@@ -12,7 +12,6 @@ const __dirname = path.dirname(__filename);
 const PORT = process.env.PORT || 8080;
 
 // Database Connection Logic
-// Prioritize Unix Socket if available (Common in Cloud Run / App Engine)
 const getDbConfig = () => {
     const config = {
         user: process.env.DB_USER || 'root',
@@ -27,14 +26,12 @@ const getDbConfig = () => {
     };
 
     // If INSTANCE_CONNECTION_NAME is provided (Standard GCP Env Variable), use socket
-    // Value example: "gen-lang-client-0461973854:asia-south2:bihari-chatkara"
     if (process.env.INSTANCE_CONNECTION_NAME) {
         config.socketPath = `/cloudsql/${process.env.INSTANCE_CONNECTION_NAME}`;
         console.log(`[DB Config] Using Cloud SQL Socket: ${config.socketPath}`);
     } 
-    // Fallback: Check if DB_HOST looks like a socket path or connection name
+    // Fallback: Check if DB_HOST looks like a socket path or connection name (contains colon but not dot)
     else if (process.env.DB_HOST && process.env.DB_HOST.includes(':') && !process.env.DB_HOST.includes('.')) {
-         // This handles case where user puts connection name in DB_HOST
          config.socketPath = `/cloudsql/${process.env.DB_HOST}`;
          console.log(`[DB Config] Inferred Socket from DB_HOST: ${config.socketPath}`);
     }
@@ -86,55 +83,62 @@ const SEED_MENU_ITEMS = [
 
 // --- APP INITIALIZATION ---
 const app = express();
-let pool = null;
+
+// Initialize pool immediately. mysql2 creates it lazily/synchronously.
+let pool = mysql.createPool(DB_CONFIG);
 let dbError = null;
+let isDbInitialized = false;
 
 // --- DATABASE INITIALIZATION ---
-const initDb = async () => {
-    try {
-        console.log(`[DB] Attempting connection...`);
-        pool = mysql.createPool(DB_CONFIG);
-        
-        // Test connection
-        const connection = await pool.getConnection();
-        console.log(`[DB] MySQL Connected Successfully to '${DB_CONFIG.database}'.`);
-        
-        // Initialize Schema
-        await connection.query(`CREATE TABLE IF NOT EXISTS users (id VARCHAR(50) PRIMARY KEY, name VARCHAR(100), email VARCHAR(100), role VARCHAR(50), permissions TEXT)`);
-        await connection.query(`CREATE TABLE IF NOT EXISTS menu_items (id VARCHAR(50) PRIMARY KEY, category_id VARCHAR(50), sub_category_id VARCHAR(50), name VARCHAR(100), category VARCHAR(100), price DECIMAL(10, 2), description TEXT, is_veg TINYINT(1), available TINYINT(1), ingredients TEXT, portion_prices TEXT, tags TEXT)`);
-        await connection.query(`CREATE TABLE IF NOT EXISTS ingredients (id VARCHAR(50) PRIMARY KEY, name VARCHAR(100), category VARCHAR(100), unit VARCHAR(20), unit_cost DECIMAL(10, 2), stock_quantity DECIMAL(10, 2))`);
-        await connection.query(`CREATE TABLE IF NOT EXISTS orders (id VARCHAR(50) PRIMARY KEY, table_number INT, server_name VARCHAR(100), status VARCHAR(50), payment_status VARCHAR(50), payment_method VARCHAR(50), created_at VARCHAR(64), tax_rate DECIMAL(5, 2), discount DECIMAL(10, 2))`);
-        await connection.query(`CREATE TABLE IF NOT EXISTS order_items (id VARCHAR(50) PRIMARY KEY, order_id VARCHAR(50), menu_item_id VARCHAR(50), name VARCHAR(100), quantity INT, price_at_order DECIMAL(10, 2), portion VARCHAR(50), modifiers TEXT, FOREIGN KEY(order_id) REFERENCES orders(id) ON DELETE CASCADE)`);
-        await connection.query(`CREATE TABLE IF NOT EXISTS expenses (id VARCHAR(50) PRIMARY KEY, description TEXT, amount DECIMAL(10, 2), category VARCHAR(100), date VARCHAR(64), reported_by VARCHAR(100))`);
-        await connection.query(`CREATE TABLE IF NOT EXISTS requisitions (id VARCHAR(50) PRIMARY KEY, ingredient_id VARCHAR(50), ingredient_name VARCHAR(100), quantity DECIMAL(10, 2), unit VARCHAR(20), urgency VARCHAR(20), status VARCHAR(20), requested_by VARCHAR(100), requested_at VARCHAR(64), notes TEXT, estimated_unit_cost DECIMAL(10, 2), preferred_supplier VARCHAR(100))`);
-        await connection.query(`CREATE TABLE IF NOT EXISTS customers (id VARCHAR(50) PRIMARY KEY, name VARCHAR(100), phone VARCHAR(20), email VARCHAR(100), loyalty_points INT, total_visits INT, last_visit VARCHAR(64), notes TEXT)`);
+// Robust initialization with retry logic
+const initDb = async (retries = 10, delay = 5000) => {
+    for (let i = 0; i < retries; i++) {
+        try {
+            console.log(`[DB] Attempting connection (Attempt ${i + 1}/${retries})...`);
+            
+            // Test connection
+            const connection = await pool.getConnection();
+            console.log(`[DB] MySQL Connected Successfully to '${DB_CONFIG.database}'.`);
+            
+            // Initialize Schema
+            await connection.query(`CREATE TABLE IF NOT EXISTS users (id VARCHAR(50) PRIMARY KEY, name VARCHAR(100), email VARCHAR(100), role VARCHAR(50), permissions TEXT)`);
+            await connection.query(`CREATE TABLE IF NOT EXISTS menu_items (id VARCHAR(50) PRIMARY KEY, category_id VARCHAR(50), sub_category_id VARCHAR(50), name VARCHAR(100), category VARCHAR(100), price DECIMAL(10, 2), description TEXT, is_veg TINYINT(1), available TINYINT(1), ingredients TEXT, portion_prices TEXT, tags TEXT)`);
+            await connection.query(`CREATE TABLE IF NOT EXISTS ingredients (id VARCHAR(50) PRIMARY KEY, name VARCHAR(100), category VARCHAR(100), unit VARCHAR(20), unit_cost DECIMAL(10, 2), stock_quantity DECIMAL(10, 2))`);
+            await connection.query(`CREATE TABLE IF NOT EXISTS orders (id VARCHAR(50) PRIMARY KEY, table_number INT, server_name VARCHAR(100), status VARCHAR(50), payment_status VARCHAR(50), payment_method VARCHAR(50), created_at VARCHAR(64), tax_rate DECIMAL(5, 2), discount DECIMAL(10, 2))`);
+            await connection.query(`CREATE TABLE IF NOT EXISTS order_items (id VARCHAR(50) PRIMARY KEY, order_id VARCHAR(50), menu_item_id VARCHAR(50), name VARCHAR(100), quantity INT, price_at_order DECIMAL(10, 2), portion VARCHAR(50), modifiers TEXT, FOREIGN KEY(order_id) REFERENCES orders(id) ON DELETE CASCADE)`);
+            await connection.query(`CREATE TABLE IF NOT EXISTS expenses (id VARCHAR(50) PRIMARY KEY, description TEXT, amount DECIMAL(10, 2), category VARCHAR(100), date VARCHAR(64), reported_by VARCHAR(100))`);
+            await connection.query(`CREATE TABLE IF NOT EXISTS requisitions (id VARCHAR(50) PRIMARY KEY, ingredient_id VARCHAR(50), ingredient_name VARCHAR(100), quantity DECIMAL(10, 2), unit VARCHAR(20), urgency VARCHAR(20), status VARCHAR(20), requested_by VARCHAR(100), requested_at VARCHAR(64), notes TEXT, estimated_unit_cost DECIMAL(10, 2), preferred_supplier VARCHAR(100))`);
+            await connection.query(`CREATE TABLE IF NOT EXISTS customers (id VARCHAR(50) PRIMARY KEY, name VARCHAR(100), phone VARCHAR(20), email VARCHAR(100), loyalty_points INT, total_visits INT, last_visit VARCHAR(64), notes TEXT)`);
 
-        // --- SEEDING ---
-        const [userRows] = await connection.query('SELECT count(*) as count FROM users');
-        if (Number(userRows[0].count) === 0) {
-            await connection.query('INSERT INTO users (id, name, email, role, permissions) VALUES (?, ?, ?, ?, ?)', ['u1', 'Administrator', 'admin@biharichatkara.com', 'Manager', '[]']);
-        }
-        const [ingRows] = await connection.query('SELECT count(*) as count FROM ingredients');
-        if (Number(ingRows[0].count) === 0) {
-            for (const i of SEED_INGREDIENTS) await connection.query('INSERT INTO ingredients (id, name, category, unit, unit_cost, stock_quantity) VALUES (?, ?, ?, ?, ?, ?)', [i.id, i.name, i.category, i.unit, i.unitCost, i.stockQuantity]);
-        }
-        const [menuRows] = await connection.query('SELECT count(*) as count FROM menu_items');
-        if (Number(menuRows[0].count) === 0) {
-            for (const m of SEED_MENU_ITEMS) await connection.query(`INSERT INTO menu_items (id, category_id, sub_category_id, name, category, price, description, is_veg, available, ingredients, portion_prices, tags) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`, [m.id, m.categoryId, m.subCategoryId, m.name, m.category, m.price, m.description, m.isVeg ? 1 : 0, m.available ? 1 : 0, JSON.stringify(m.ingredients), JSON.stringify(m.portionPrices), JSON.stringify(m.tags)]);
-        }
+            // --- SEEDING ---
+            const [userRows] = await connection.query('SELECT count(*) as count FROM users');
+            if (Number(userRows[0].count) === 0) {
+                await connection.query('INSERT INTO users (id, name, email, role, permissions) VALUES (?, ?, ?, ?, ?)', ['u1', 'Administrator', 'admin@biharichatkara.com', 'Manager', '[]']);
+            }
+            const [ingRows] = await connection.query('SELECT count(*) as count FROM ingredients');
+            if (Number(ingRows[0].count) === 0) {
+                for (const i of SEED_INGREDIENTS) await connection.query('INSERT INTO ingredients (id, name, category, unit, unit_cost, stock_quantity) VALUES (?, ?, ?, ?, ?, ?)', [i.id, i.name, i.category, i.unit, i.unitCost, i.stockQuantity]);
+            }
+            const [menuRows] = await connection.query('SELECT count(*) as count FROM menu_items');
+            if (Number(menuRows[0].count) === 0) {
+                for (const m of SEED_MENU_ITEMS) await connection.query(`INSERT INTO menu_items (id, category_id, sub_category_id, name, category, price, description, is_veg, available, ingredients, portion_prices, tags) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`, [m.id, m.categoryId, m.subCategoryId, m.name, m.category, m.price, m.description, m.isVeg ? 1 : 0, m.available ? 1 : 0, JSON.stringify(m.ingredients), JSON.stringify(m.portionPrices), JSON.stringify(m.tags)]);
+            }
 
-        connection.release();
-        dbError = null;
-        console.log("[DB] Initialization and Seeding Complete.");
-    } catch (e) {
-        console.error("[DB] Critical Error initializing MySQL:", e.message);
-        // Specifically log socket errors
-        if (e.code === 'ENOENT' && e.message.includes('connect')) {
-             console.error(`[DB] Socket Error: Ensure Cloud SQL Admin API is enabled and the socket path '${DB_CONFIG.socketPath}' is accessible.`);
+            connection.release();
+            dbError = null;
+            isDbInitialized = true;
+            console.log("[DB] Initialization and Seeding Complete.");
+            return; // Success
+        } catch (e) {
+            const target = DB_CONFIG.socketPath ? `Socket ${DB_CONFIG.socketPath}` : `Host ${DB_CONFIG.host}`;
+            console.error(`[DB] Error connecting to ${target}:`, e.message);
+            dbError = e.message;
+            
+            // Wait before retry
+            await new Promise(res => setTimeout(res, delay));
         }
-        pool = null;
-        dbError = e.message;
     }
+    console.error("[DB] All connection attempts failed.");
 };
 
 // --- MIDDLEWARE ---
@@ -142,19 +146,34 @@ app.use(cors({ origin: '*', methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS']
 app.use(express.json());
 
 // --- HEALTH HANDLER ---
-const healthHandler = (req, res) => {
-    if (!pool) {
-        return res.status(503).json({
-            status: 'error',
-            message: 'Database not connected.',
-            details: dbError,
-            config: {
-                host: DB_CONFIG.host,
-                socketPath: DB_CONFIG.socketPath,
-                user: DB_CONFIG.user
-            }
-        });
+const healthHandler = async (req, res) => {
+    // If we haven't initialized successfully yet, check if we can connect now
+    if (!isDbInitialized) {
+        try {
+            const conn = await pool.getConnection();
+            conn.release();
+            // If success, we are technically connected even if tables aren't verified yet
+             res.json({
+                status: 'starting',
+                database: 'mysql',
+                message: 'Database connecting...',
+                details: dbError
+            });
+            return;
+        } catch (e) {
+             return res.status(503).json({
+                status: 'error',
+                message: 'Database not connected.',
+                details: dbError || e.message,
+                config: {
+                    host: DB_CONFIG.host,
+                    socketPath: DB_CONFIG.socketPath,
+                    user: DB_CONFIG.user
+                }
+            });
+        }
     }
+
     res.json({
         status: 'ok',
         database: 'mysql',
@@ -342,8 +361,8 @@ const startServer = async () => {
     app.listen(PORT, '0.0.0.0', () => {
         console.log(`[Boot] Server running on http://0.0.0.0:${PORT}`);
     });
-    // Initialize DB in background
-    initDb();
+    // Initialize DB in background with retries
+    initDb(20, 3000); // 20 attempts, 3 seconds apart
 };
 
 startServer();
