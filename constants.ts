@@ -1,7 +1,7 @@
 
 import { Ingredient, MenuItem, Order, OrderStatus, PaymentStatus, PaymentMethod, UserRole, EmployeeShift, User, Expense, RequisitionRequest, RequisitionStatus, RequisitionUrgency, Customer } from './types';
 
-export const APP_DATA_VERSION = "2.3.0"; 
+export const APP_DATA_VERSION = "2.3.1"; 
 
 // --- MASTER DATA (The Source of Truth / Fallback) ---
 
