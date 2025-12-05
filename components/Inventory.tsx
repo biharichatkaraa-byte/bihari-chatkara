@@ -249,8 +249,15 @@ const Inventory: React.FC<InventoryProps> = ({
     if (selectedIds.size === 0) return;
 
     const updates: Partial<Ingredient> = {};
-    if (bulkQty !== '') updates.stockQuantity = parseFloat(bulkQty);
-    if (bulkCost !== '') updates.unitCost = parseFloat(bulkCost);
+    
+    if (bulkQty !== '') {
+        const qty = parseFloat(bulkQty);
+        if (!isNaN(qty)) updates.stockQuantity = qty;
+    }
+    if (bulkCost !== '') {
+        const cost = parseFloat(bulkCost);
+        if (!isNaN(cost)) updates.unitCost = cost;
+    }
 
     if (Object.keys(updates).length === 0) return;
 
@@ -267,10 +274,18 @@ const Inventory: React.FC<InventoryProps> = ({
   const handleBulkDelete = () => {
       if (selectedIds.size === 0) return;
       if (confirm(`Are you sure you want to PERMANENTLY delete ${selectedIds.size} inventory items? This cannot be undone.`)) {
-          // Perform actual deletion via prop
+          // 1. Delete from DB/Parent immediately
           Array.from(selectedIds).forEach(id => onDeleteIngredient(id));
+          
+          // 2. Delete from Local State to preserve other pending edits
+          setLocalIngredients(prev => prev.filter(i => !selectedIds.has(i.id)));
+          
+          // 3. Clear Selection
           setSelectedIds(new Set());
-          setHasUnsavedChanges(false);
+          
+          // DO NOT reset hasUnsavedChanges here.
+          // If we had pending changes to other items, we want to keep them 'unsaved' status 
+          // so the user knows they still need to click Save, and so useEffect doesn't overwrite them.
       }
   };
 
@@ -326,6 +341,8 @@ const Inventory: React.FC<InventoryProps> = ({
   const handleStockDeleteSingle = (id: string) => {
       if (confirm('Are you sure you want to delete this ingredient?')) {
           onDeleteIngredient(id);
+          // Manually remove from local state to ensure visual consistency 
+          // even if we have unsaved changes blocking the prop sync.
           setLocalIngredients(prev => prev.filter(i => i.id !== id));
       }
   };

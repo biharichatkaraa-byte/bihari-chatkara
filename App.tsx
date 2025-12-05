@@ -140,7 +140,13 @@ const App: React.FC = () => {
   const handleUpdateOrderStatus = (orderId: string, status: OrderStatus) => {
     const order = orders.find(o => o.id === orderId);
     if (order) {
-        const updated = { ...order, status };
+        let updated = { ...order, status };
+        
+        // If finishing the order, add completion timestamp if not already set
+        if ((status === OrderStatus.SERVED || status === OrderStatus.CANCELLED) && !updated.completedAt) {
+            updated.completedAt = new Date();
+        }
+
         setOrders(prev => prev.map(o => o.id === orderId ? updated : o)); // Optimistic
         db.updateItem('orders', updated);
     }

@@ -62,9 +62,11 @@ const KDS: React.FC<KDSProps> = ({ orders, updateOrderStatus, userRole, menuItem
 
   const canManageOrders = userRole === UserRole.MANAGER || userRole === UserRole.CHEF;
 
-  const getTicketColor = (createdAt: Date, status: OrderStatus) => {
+  const getTicketColor = (createdAt: Date | string, status: OrderStatus) => {
     if (status === OrderStatus.READY) return 'border-green-500 bg-green-50';
-    const mins = (now.getTime() - createdAt.getTime()) / 60000;
+    
+    const created = new Date(createdAt);
+    const mins = (now.getTime() - created.getTime()) / 60000;
     
     // Prioritization Logic: Flash Red if > 15 mins (Urgent/Late)
     if (mins > 15 && status !== OrderStatus.SERVED) return 'border-red-500 bg-red-50 animate-flash-red ring-4 ring-red-200';
@@ -107,7 +109,10 @@ const KDS: React.FC<KDSProps> = ({ orders, updateOrderStatus, userRole, menuItem
       setIsGeneratingRecipe(false);
   };
 
-  const activeOrders = orders.filter(o => o.status !== OrderStatus.SERVED).sort((a, b) => a.createdAt.getTime() - b.createdAt.getTime());
+  // Filter active orders: Not SERVED and Not CANCELLED
+  const activeOrders = orders
+    .filter(o => o.status !== OrderStatus.SERVED && o.status !== OrderStatus.CANCELLED)
+    .sort((a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime());
 
   return (
     <div className="h-full flex flex-col relative">
@@ -168,7 +173,7 @@ const KDS: React.FC<KDSProps> = ({ orders, updateOrderStatus, userRole, menuItem
                             {getStatusBadge(order.status)}
                             <span className="text-xs font-mono text-slate-500 mt-1 flex items-center gap-1">
                                 <Clock size={10} />
-                                {formatDistanceToNow(order.createdAt, { addSuffix: true })}
+                                {formatDistanceToNow(new Date(order.createdAt), { addSuffix: true })}
                             </span>
                         </div>
                     </div>
@@ -233,7 +238,7 @@ const KDS: React.FC<KDSProps> = ({ orders, updateOrderStatus, userRole, menuItem
                                 disabled={!canManageOrders}
                                 className="w-full py-3 bg-slate-600 hover:bg-slate-700 disabled:bg-slate-300 disabled:cursor-not-allowed text-white font-bold rounded shadow active:scale-95 transition-transform"
                             >
-                                Order Served
+                                Order Served (Clear)
                             </button>
                         )}
                     </div>
@@ -256,7 +261,10 @@ const KDS: React.FC<KDSProps> = ({ orders, updateOrderStatus, userRole, menuItem
                     
                     <div className="mb-6">
                         <p className="text-slate-600 mb-2">Are you sure you want to mark Table <span className="font-bold">#{confirmationOrder.order.tableNumber}</span> as <span className="font-bold uppercase text-slate-800">{confirmationOrder.nextStatus}</span>?</p>
-                        <div className="bg-slate-50 p-3 rounded-lg border border-slate-100 text-sm text-slate-500">
+                        {confirmationOrder.nextStatus === OrderStatus.SERVED && (
+                            <p className="text-xs text-slate-400">This will remove the ticket from the KDS view.</p>
+                        )}
+                        <div className="bg-slate-50 p-3 rounded-lg border border-slate-100 text-sm text-slate-500 mt-2">
                              {confirmationOrder.order.items.length} Items: <br/>
                              {confirmationOrder.order.items.map(i => {
                                  const displayName = i.name || menuItems.find(x => x.id === i.menuItemId)?.name || 'Custom Item';
