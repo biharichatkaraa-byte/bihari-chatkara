@@ -11,7 +11,7 @@ A comprehensive, cloud-ready Restaurant Management System built with React, Vite
 *   **Procurement**: Purchase requisition workflow (Chef request -> Manager approve -> Purchase Order).
 *   **Expenses**: Operational cost tracking and budgeting.
 *   **Staff Management**: Role-based access control (Manager, Chef, Server).
-*   **Hybrid Data Mode**: Works with a local backend/MySQL or falls back to browser LocalStorage for demos.
+*   **Hybrid Data Mode**: Works with a local backend/MySQL or falls back to browser LocalStorage for demos automatically.
 
 ## Tech Stack
 
@@ -40,10 +40,15 @@ A comprehensive, cloud-ready Restaurant Management System built with React, Vite
     npm install
     ```
 
-3.  Set up Environment Variables:
-    Copy `.env.example` to `.env` and fill in your database credentials.
+3.  (Optional) Set up Environment Variables:
+    Copy `.env.example` to `.env` and fill in your database credentials if running the backend.
     ```bash
-    cp .env.example .env
+    # Example .env content
+    DB_HOST=127.0.0.1
+    DB_USER=root
+    DB_PASSWORD=your_password
+    DB_NAME=chatkara
+    PORT=8080
     ```
 
 ### Running Locally (Development)
@@ -60,6 +65,16 @@ Run the backend server (optional, required for MySQL features):
 npm start
 ```
 
+## Demo Credentials
+
+The application comes with a **Demo Mode** enabled by default. Click the role buttons on the login screen or use:
+
+| Role | Email | Password |
+|------|-------|----------|
+| **Admin** | `admin@biharichatkara.com` | `admin123` |
+| **Chef** | `chef@biharichatkara.com` | `chef123` |
+| **Staff** | `server@biharichatkara.com` | `server123` |
+
 ## Deployment
 
 1.  Build the frontend:
@@ -71,4 +86,4 @@ npm start
 
 ## License
 
-Private / Proprietary.
+MIT License. See [LICENSE](LICENSE) for details.

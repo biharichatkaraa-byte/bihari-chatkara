@@ -163,19 +163,41 @@ const POS: React.FC<POSProps> = ({ orders, menuItems, onPlaceOrder, onUpdateOrde
     setPortionQuantity(1);
   };
 
-  // Quick Add Full Portion
-  const handleQuickAdd = (item: MenuItem, e: React.MouseEvent) => {
-    e.stopPropagation(); 
-    if (item.available === false) return; // Prevent action if out of stock
-    
-    const price = getPortionPrice(item, 'Full');
-    
-    if (price > 0) {
-        addToCart(item, 'Full', price, 1);
-    } else {
-        // If Full portion is unavailable (0 price), open modal to select another portion
-        openPortionModal(item);
-    }
+  // Smart Item Click Handler
+  const handleItemClick = (item: MenuItem) => {
+      if (item.available === false) return;
+
+      // Check if item has portion variations
+      const hasHalf = getPortionPrice(item, 'Half') > 0 && (!item.portionPrices || item.portionPrices.half !== undefined);
+      const hasQuarter = getPortionPrice(item, 'Quarter') > 0 && (!item.portionPrices || item.portionPrices.quarter !== undefined);
+      
+      // Heuristic: If item strictly has only Full price (and others are 0 or undefined in specific structure), add directly.
+      // However, getPortionPrice uses fallback logic. Let's check the specific portionPrices object if it exists.
+      
+      let needsModal = false;
+      if (item.portionPrices) {
+          if ((item.portionPrices.half && item.portionPrices.half > 0) || (item.portionPrices.quarter && item.portionPrices.quarter > 0)) {
+              needsModal = true;
+          }
+      } else {
+          // If no specific portion mapping, assume standard pricing logic might apply, 
+          // but usually simple items just add. Let's assume simpler items don't need modal unless forced.
+          // For safety in this specific RMS, let's trust the portionPrices object.
+          needsModal = false; 
+      }
+
+      if (needsModal) {
+          openPortionModal(item);
+      } else {
+          // Quick Add Full
+          const price = getPortionPrice(item, 'Full');
+          if (price > 0) {
+              addToCart(item, 'Full', price, 1);
+          } else {
+              // Fallback if even Full is 0 (shouldn't happen)
+              openPortionModal(item);
+          }
+      }
   };
 
   // Toggle Item Availability (Manager Only)
@@ -430,13 +452,14 @@ const POS: React.FC<POSProps> = ({ orders, menuItems, onPlaceOrder, onUpdateOrde
           setManualDiscount(activeOrder.discount?.toString() || '');
           setActiveView('new_order');
       } else if (action === 'settle' && activeOrder) {
-          // SETTLE MODE: Use new_order view with payment options open to allow settling
+          // SETTLE MODE: Use new_order view WITHOUT opening payment options immediately
+          // This allows users to see 'Print Bill' or 'Save Draft' before clicking 'Pay'.
           setSelectedTable(occupiedTableId);
           setEditingOrder(activeOrder);
           setCurrentCart([...activeOrder.items]);
           setManualTaxRate(activeOrder.taxRate?.toString() || '');
           setManualDiscount(activeOrder.discount?.toString() || '');
-          setShowPaymentOptions(true);
+          setShowPaymentOptions(false); // Changed to false to allow preview/print
           setActiveView('new_order');
       }
       setOccupiedTableId(null);
@@ -649,7 +672,7 @@ const POS: React.FC<POSProps> = ({ orders, menuItems, onPlaceOrder, onUpdateOrde
                     className={`px-3 py-1.5 rounded-full whitespace-nowrap text-xs font-bold transition-colors border ${
                         selectedSubCategory === 'All'
                         ? 'bg-slate-700 text-white border-slate-700'
-                        : 'bg-slate-50 text-slate-500 border-slate-200 hover:bg-slate-200'
+                        : 'bg-white text-slate-500 border-slate-200 hover:bg-slate-200'
                     }`}
                 >
                     All {selectedCategory}
@@ -676,7 +699,7 @@ const POS: React.FC<POSProps> = ({ orders, menuItems, onPlaceOrder, onUpdateOrde
             return (
             <div
               key={item.id}
-              onClick={() => !isOutOfStock && openPortionModal(item)}
+              onClick={() => handleItemClick(item)}
               className={`bg-white p-3 lg:p-4 rounded-xl shadow-sm border transition-all text-left flex flex-col min-h-[140px] h-full justify-between group relative overflow-hidden ${
                   isOutOfStock 
                     ? 'border-slate-200 opacity-70 cursor-not-allowed bg-slate-50' 
@@ -704,16 +727,14 @@ const POS: React.FC<POSProps> = ({ orders, menuItems, onPlaceOrder, onUpdateOrde
                         <Ban size={10} /> SOLD OUT
                     </span>
                 ) : (
-                    // Only show Quick Add if Full portion is available
-                    getPortionPrice(item, 'Full') > 0 && (
-                        <button
-                        onClick={(e) => handleQuickAdd(item, e)}
-                        className="w-8 h-8 rounded-full bg-blue-50 text-blue-600 flex items-center justify-center hover:bg-blue-600 hover:text-white transition-colors"
-                        title="Quick Add Full Portion"
-                        >
-                        <Plus size={16} />
-                        </button>
-                    )
+                    // Plus button essentially does the same smart check now, but allows direct quick add
+                    <button
+                    onClick={(e) => { e.stopPropagation(); handleItemClick(item); }}
+                    className="w-8 h-8 rounded-full bg-blue-50 text-blue-600 flex items-center justify-center hover:bg-blue-600 hover:text-white transition-colors"
+                    title="Add to Order"
+                    >
+                    <Plus size={16} />
+                    </button>
                 )}
               </div>
               
@@ -950,7 +971,7 @@ const POS: React.FC<POSProps> = ({ orders, menuItems, onPlaceOrder, onUpdateOrde
                         disabled={currentCart.length === 0}
                         className="flex items-center justify-center gap-2 py-2 rounded-lg bg-slate-200 text-slate-700 text-xs font-bold hover:bg-slate-300 disabled:opacity-50"
                     >
-                        <SkipForward size={14} /> Save & Skip
+                        <SkipForward size={14} /> Save Draft
                     </button>
                     <button
                         onClick={handlePrintOnly}

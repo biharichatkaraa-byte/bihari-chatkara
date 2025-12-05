@@ -1,7 +1,7 @@
 
 import React, { useState } from 'react';
 import { User, UserRole } from '../types';
-import { ChefHat, Lock, Mail, ArrowRight, Loader2, AlertCircle } from 'lucide-react';
+import { ChefHat, Lock, Mail, ArrowRight, Loader2, AlertCircle, UserCheck } from 'lucide-react';
 import { APP_DATA_VERSION } from '../constants';
 
 interface LoginProps {
@@ -25,8 +25,7 @@ const Login: React.FC<LoginProps> = ({ onLogin }) => {
       
       const lowerEmail = email.toLowerCase();
       
-      // Hardcoded Credentials for Production Deployment
-      // These are hidden from the UI but active for login
+      // Hardcoded Credentials for Production Deployment / Demo
       if (lowerEmail === 'admin@biharichatkara.com' && password === 'admin123') {
           onLogin({ id: 'u1', name: 'Administrator', email: lowerEmail, role: UserRole.MANAGER });
       } 
@@ -42,8 +41,11 @@ const Login: React.FC<LoginProps> = ({ onLogin }) => {
     }, 800);
   };
 
-  const handleForgotPassword = () => {
-      alert("Please contact your system administrator to reset your password.\n\n(For demo purposes: Admin password is 'admin123')");
+  const fillDemo = (role: 'admin' | 'chef' | 'server') => {
+      if (role === 'admin') { setEmail('admin@biharichatkara.com'); setPassword('admin123'); }
+      if (role === 'chef') { setEmail('chef@biharichatkara.com'); setPassword('chef123'); }
+      if (role === 'server') { setEmail('server@biharichatkara.com'); setPassword('server123'); }
+      setError('');
   };
 
   return (
@@ -59,7 +61,7 @@ const Login: React.FC<LoginProps> = ({ onLogin }) => {
         </div>
 
         {/* Form */}
-        <div className="p-8 pb-10">
+        <div className="p-8 pb-6">
           <form onSubmit={handleSubmit} className="space-y-5">
             <div>
               <label className="block text-sm font-medium text-slate-700 mb-1">Email Address</label>
@@ -81,13 +83,6 @@ const Login: React.FC<LoginProps> = ({ onLogin }) => {
             <div>
               <div className="flex justify-between items-center mb-1">
                 <label className="block text-sm font-medium text-slate-700">Password</label>
-                <button 
-                    type="button"
-                    onClick={handleForgotPassword}
-                    className="text-xs font-semibold text-orange-600 hover:text-orange-700 hover:underline"
-                >
-                    Forgot Password?
-                </button>
               </div>
               <div className="relative">
                 <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
@@ -118,6 +113,25 @@ const Login: React.FC<LoginProps> = ({ onLogin }) => {
               {loading ? <Loader2 size={20} className="animate-spin" /> : <>Login <ArrowRight size={20} /></>}
             </button>
           </form>
+        </div>
+
+        {/* Demo Login Helpers */}
+        <div className="px-8 pb-8 pt-2 bg-slate-50 border-t border-slate-100">
+            <p className="text-xs text-slate-400 font-bold uppercase tracking-wider mb-3 text-center">Quick Demo Login</p>
+            <div className="grid grid-cols-3 gap-2">
+                <button onClick={() => fillDemo('admin')} className="flex flex-col items-center justify-center p-2 rounded-lg border border-slate-200 bg-white hover:border-orange-300 hover:shadow-sm transition-all group">
+                    <UserCheck size={16} className="text-slate-400 group-hover:text-orange-500 mb-1"/>
+                    <span className="text-[10px] font-bold text-slate-600">Admin</span>
+                </button>
+                <button onClick={() => fillDemo('chef')} className="flex flex-col items-center justify-center p-2 rounded-lg border border-slate-200 bg-white hover:border-orange-300 hover:shadow-sm transition-all group">
+                    <ChefHat size={16} className="text-slate-400 group-hover:text-orange-500 mb-1"/>
+                    <span className="text-[10px] font-bold text-slate-600">Chef</span>
+                </button>
+                <button onClick={() => fillDemo('server')} className="flex flex-col items-center justify-center p-2 rounded-lg border border-slate-200 bg-white hover:border-orange-300 hover:shadow-sm transition-all group">
+                    <UserCheck size={16} className="text-slate-400 group-hover:text-orange-500 mb-1"/>
+                    <span className="text-[10px] font-bold text-slate-600">Staff</span>
+                </button>
+            </div>
         </div>
       </div>
       

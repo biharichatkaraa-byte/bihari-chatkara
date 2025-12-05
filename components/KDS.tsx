@@ -56,7 +56,10 @@ const KDS: React.FC<KDSProps> = ({ orders, updateOrderStatus, userRole, menuItem
   const playAlertSound = () => {
       if (audioRef.current) {
           audioRef.current.currentTime = 0;
-          audioRef.current.play().catch(e => console.log("Audio play failed (interaction needed)", e));
+          const playPromise = audioRef.current.play();
+          if (playPromise !== undefined) {
+              playPromise.catch(e => console.log("Audio play failed (interaction needed)", e));
+          }
       }
   };
 
@@ -116,7 +119,7 @@ const KDS: React.FC<KDSProps> = ({ orders, updateOrderStatus, userRole, menuItem
 
   return (
     <div className="h-full flex flex-col relative">
-        {/* Simple beep sound source */}
+        {/* Valid Beep Sound (Short Sine Wave) */}
         <audio ref={audioRef} src="data:audio/wav;base64,UklGRl9vT19XQVZFZm10IBAAAAABAAEAQB8AAEAfAAABAAgAZGF0YU" />
 
         <div className="flex justify-between items-center mb-4">
