@@ -55,7 +55,6 @@ const SEED_INGREDIENTS = [
 
 const SEED_MENU_ITEMS = [
   { id: 'm1', categoryId: 'Tawa', subCategoryId: 'Mutton', name: 'Tawa Keema Kaleji', category: 'Tawa', price: 550, portionPrices: { half: 300, full: 550 }, isVeg: false, available: true, ingredients: [] },
-  // ... (Menu items kept as is, truncated for brevity in this specific update block but assumed present)
 ];
 
 // --- APP INITIALIZATION ---
@@ -213,6 +212,23 @@ const parseRow = (row, jsonFields = []) => {
 // 3. API Routes
 api.get('/', (req, res) => res.json({ message: "Bihari Chatkara API Root" }));
 
+// Auth - Login
+api.post('/login', async (req, res) => {
+    const { email, password } = req.body;
+    try {
+        const [rows] = await pool.query('SELECT * FROM users WHERE email = ? AND password = ?', [email, password]);
+        if (rows.length > 0) {
+            const user = parseRow(rows[0], ['permissions']);
+            delete user.password; // IMPORTANT: Do not send password back to client
+            res.json({ success: true, user });
+        } else {
+            res.status(401).json({ success: false, error: 'Invalid credentials' });
+        }
+    } catch (e) {
+        res.status(500).json({ success: false, error: e.message });
+    }
+});
+
 // Orders
 api.get('/orders', async (req, res) => {
     try {
@@ -246,7 +262,7 @@ api.put('/orders/:id', async (req, res) => {
     try {
         await connection.beginTransaction();
         
-        // 1. Update main order fields (Status, Payment, Discount, etc.)
+        // 1. Update main order fields
         await connection.query('UPDATE orders SET payment_status = ?, payment_method = ?, status = ?, discount = ?, tax_rate = ? WHERE id = ?', 
             [o.paymentStatus, o.paymentMethod, o.status, o.discount, o.taxRate, req.params.id]);
         

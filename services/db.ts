@@ -202,6 +202,35 @@ const getUrl = (endpoint: string) => {
     return `${base}${endpoint}`;
 }
 
+// --- AUTHENTICATION ---
+
+export const loginUser = async (email: string, password: string): Promise<{ success: boolean, user?: any, error?: string }> => {
+    if (isLive) {
+        try {
+            const res = await fetch(getUrl('/api/login'), {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ email, password }),
+                mode: 'cors'
+            });
+            const data = await res.json();
+            if (res.ok && data.success) {
+                return { success: true, user: data.user };
+            }
+            return { success: false, error: data.error || 'Login failed' };
+        } catch (e) {
+            return { success: false, error: 'Network error during login' };
+        }
+    } else {
+        // Local Mode Fallback (Offline)
+        const saved = localStorage.getItem('rms_users');
+        const users = saved ? JSON.parse(saved) : [];
+        const user = users.find((u: any) => u.email.toLowerCase() === email.toLowerCase() && u.password === password);
+        if (user) return { success: true, user };
+        return { success: false, error: 'Invalid credentials (Local Mode)' };
+    }
+};
+
 // --- SUBSCRIPTION & CRUD ---
 
 export const subscribeToCollection = (

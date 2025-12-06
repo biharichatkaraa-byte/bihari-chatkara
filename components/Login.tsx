@@ -3,39 +3,36 @@ import React, { useState } from 'react';
 import { User, UserRole } from '../types';
 import { ChefHat, Lock, Mail, ArrowRight, Loader2, AlertCircle, User as UserIcon } from 'lucide-react';
 import { APP_DATA_VERSION } from '../constants';
+import { loginUser } from '../services/db';
 
 interface LoginProps {
   onLogin: (user: User) => void;
-  users?: User[];
 }
 
-const Login: React.FC<LoginProps> = ({ onLogin, users = [] }) => {
+const Login: React.FC<LoginProps> = ({ onLogin }) => {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError('');
     setLoading(true);
     
-    // Simulate API delay
-    setTimeout(() => {
-      setLoading(false);
-      
-      const lowerEmail = email.toLowerCase();
-      
-      // Strict Database Check: Only authenticate if user exists in the provided list
-      const dbUser = users.find(u => u.email.toLowerCase() === lowerEmail && u.password === password);
-      
-      if (dbUser) {
-          onLogin(dbUser);
-          return;
-      }
-      
-      setError('Invalid email or password. Please verify credentials or check database connection.');
-    }, 800);
+    try {
+        const result = await loginUser(email, password);
+        
+        if (result.success && result.user) {
+            onLogin(result.user);
+        } else {
+            setError(result.error || 'Invalid credentials. Please try again.');
+        }
+    } catch (err) {
+        setError('An unexpected error occurred. Check connection.');
+    } finally {
+        setLoading(false);
+    }
   };
 
   const fillDemo = (role: 'admin' | 'chef' | 'server') => {

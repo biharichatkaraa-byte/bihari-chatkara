@@ -345,7 +345,7 @@ const App: React.FC = () => {
 
   // If not logged in, show Login Screen
   if (!currentUser) {
-    return <Login onLogin={handleLogin} users={users} />;
+    return <Login onLogin={handleLogin} />;
   }
 
   return (
