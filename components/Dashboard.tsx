@@ -345,6 +345,7 @@ const Dashboard: React.FC<DashboardProps> = ({ orders, expenses = [], allData, o
               </div>
           </div>
 
+          {/* Cash Sales Card (Replaces Net Profit) */}
           <div className="bg-white p-5 rounded-xl shadow-sm border border-slate-200 flex flex-col justify-between">
               <div>
                   <p className="text-xs font-bold text-slate-400 uppercase tracking-wider">Cash Sales</p>
@@ -357,6 +358,7 @@ const Dashboard: React.FC<DashboardProps> = ({ orders, expenses = [], allData, o
               </div>
           </div>
 
+          {/* Online Sales Card (Replaces Inventory Value) */}
           <div className="bg-white p-5 rounded-xl shadow-sm border border-slate-200 flex flex-col justify-between">
               <div>
                   <p className="text-xs font-bold text-slate-400 uppercase tracking-wider">Online Sales</p>
