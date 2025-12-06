@@ -76,10 +76,8 @@ export const MENU_ITEMS: MenuItem[] = [
 
 export const INITIAL_ORDERS: Order[] = [];
 export const SHIFTS: EmployeeShift[] = [];
-export const MOCK_USERS: User[] = [
-  { id: 'u1', name: 'Admin User', email: 'admin@biharichatkara.com', role: UserRole.MANAGER },
-  { id: 'u2', name: 'Head Chef', email: 'chef@biharichatkara.com', role: UserRole.CHEF },
-];
+// MOCK_USERS cleared to enforce DB usage. Admin is seeded by server.js.
+export const MOCK_USERS: User[] = []; 
 export const MOCK_EXPENSES: Expense[] = [];
 export const INITIAL_REQUISITIONS: RequisitionRequest[] = [];
 export const MOCK_CUSTOMERS: Customer[] = [];

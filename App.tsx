@@ -45,6 +45,7 @@ const App: React.FC = () => {
 
     // Subscribe to all collections
     // NOTE: Fallbacks set to empty arrays [] to ensure NO static data is used.
+    // Users are fetched strictly from DB. server.js seeds the initial Admin if empty.
     const unsubOrders = db.subscribeToCollection('orders', setOrders, []);
     const unsubMenu = db.subscribeToCollection('menuItems', setMenuItems, []);
     const unsubIng = db.subscribeToCollection('ingredients', setIngredients, []);
@@ -344,7 +345,7 @@ const App: React.FC = () => {
 
   // If not logged in, show Login Screen
   if (!currentUser) {
-    return <Login onLogin={handleLogin} />;
+    return <Login onLogin={handleLogin} users={users} />;
   }
 
   return (

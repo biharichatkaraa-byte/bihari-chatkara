@@ -6,9 +6,10 @@ import { APP_DATA_VERSION } from '../constants';
 
 interface LoginProps {
   onLogin: (user: User) => void;
+  users?: User[];
 }
 
-const Login: React.FC<LoginProps> = ({ onLogin }) => {
+const Login: React.FC<LoginProps> = ({ onLogin, users = [] }) => {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [loading, setLoading] = useState(false);
@@ -25,19 +26,15 @@ const Login: React.FC<LoginProps> = ({ onLogin }) => {
       
       const lowerEmail = email.toLowerCase();
       
-      // Hardcoded Credentials for Production Deployment / Demo
-      if (lowerEmail === 'admin@biharichatkara.com' && password === 'admin123') {
-          onLogin({ id: 'u1', name: 'Administrator', email: lowerEmail, role: UserRole.MANAGER });
-      } 
-      else if (lowerEmail === 'chef@biharichatkara.com' && password === 'chef123') {
-          onLogin({ id: 'u2', name: 'Head Chef', email: lowerEmail, role: UserRole.CHEF });
+      // Strict Database Check: Only authenticate if user exists in the provided list
+      const dbUser = users.find(u => u.email.toLowerCase() === lowerEmail && u.password === password);
+      
+      if (dbUser) {
+          onLogin(dbUser);
+          return;
       }
-      else if (lowerEmail === 'server@biharichatkara.com' && password === 'server123') {
-          onLogin({ id: 'u3', name: 'Staff Member', email: lowerEmail, role: UserRole.SERVER });
-      }
-      else {
-          setError('Invalid email or password.');
-      }
+      
+      setError('Invalid email or password. Please verify credentials or check database connection.');
     }, 800);
   };
 
@@ -115,9 +112,9 @@ const Login: React.FC<LoginProps> = ({ onLogin }) => {
           </form>
         </div>
 
-        {/* Demo Login Helpers */}
+        {/* Demo Login Helpers - Just auto-fills form, does NOT bypass auth */}
         <div className="px-8 pb-8 pt-2 bg-slate-50 border-t border-slate-100">
-            <p className="text-xs text-slate-400 font-bold uppercase tracking-wider mb-3 text-center">Quick Demo Login</p>
+            <p className="text-xs text-slate-400 font-bold uppercase tracking-wider mb-3 text-center">Quick Fill (Requires DB Seed)</p>
             <div className="grid grid-cols-3 gap-2">
                 <button onClick={() => fillDemo('admin')} className="flex flex-col items-center justify-center p-2 rounded-lg border border-slate-200 bg-white hover:border-orange-300 hover:shadow-sm transition-all group">
                     <UserIcon size={16} className="text-slate-400 group-hover:text-orange-500 mb-1"/>
