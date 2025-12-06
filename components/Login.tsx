@@ -1,7 +1,7 @@
 
 import React, { useState } from 'react';
 import { User, UserRole } from '../types';
-import { ChefHat, Lock, Mail, ArrowRight, Loader2, AlertCircle, UserCheck } from 'lucide-react';
+import { ChefHat, Lock, Mail, ArrowRight, Loader2, AlertCircle, User as UserIcon } from 'lucide-react';
 import { APP_DATA_VERSION } from '../constants';
 
 interface LoginProps {
@@ -120,7 +120,7 @@ const Login: React.FC<LoginProps> = ({ onLogin }) => {
             <p className="text-xs text-slate-400 font-bold uppercase tracking-wider mb-3 text-center">Quick Demo Login</p>
             <div className="grid grid-cols-3 gap-2">
                 <button onClick={() => fillDemo('admin')} className="flex flex-col items-center justify-center p-2 rounded-lg border border-slate-200 bg-white hover:border-orange-300 hover:shadow-sm transition-all group">
-                    <UserCheck size={16} className="text-slate-400 group-hover:text-orange-500 mb-1"/>
+                    <UserIcon size={16} className="text-slate-400 group-hover:text-orange-500 mb-1"/>
                     <span className="text-[10px] font-bold text-slate-600">Admin</span>
                 </button>
                 <button onClick={() => fillDemo('chef')} className="flex flex-col items-center justify-center p-2 rounded-lg border border-slate-200 bg-white hover:border-orange-300 hover:shadow-sm transition-all group">
@@ -128,7 +128,7 @@ const Login: React.FC<LoginProps> = ({ onLogin }) => {
                     <span className="text-[10px] font-bold text-slate-600">Chef</span>
                 </button>
                 <button onClick={() => fillDemo('server')} className="flex flex-col items-center justify-center p-2 rounded-lg border border-slate-200 bg-white hover:border-orange-300 hover:shadow-sm transition-all group">
-                    <UserCheck size={16} className="text-slate-400 group-hover:text-orange-500 mb-1"/>
+                    <UserIcon size={16} className="text-slate-400 group-hover:text-orange-500 mb-1"/>
                     <span className="text-[10px] font-bold text-slate-600">Staff</span>
                 </button>
             </div>

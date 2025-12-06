@@ -1,7 +1,7 @@
 
 import React, { useState, useEffect, useMemo } from 'react';
 import { MenuItem, Order, OrderStatus, PaymentStatus, LineItem, PaymentMethod, UserRole } from '../types';
-import { Plus, Minus, Trash2, Send, CreditCard, ShoppingCart, Banknote, Smartphone, Search, X, Clock, CheckCircle, RotateCcw, Receipt, AlertCircle, Zap, Tag, Percent, Ban, Eye, EyeOff, Power, Printer, Pencil, Save, ChevronUp, ChevronDown, ArrowLeft, Check, LayoutGrid, Utensils, Users, Timer, AlertTriangle, FileText, SkipForward } from 'lucide-react';
+import { Plus, Minus, Trash2, Send, CreditCard, ShoppingCart, Banknote, Smartphone, Search, X, Clock, CheckCircle, Receipt, AlertCircle, Zap, Tag, Percent, Ban, Eye, EyeOff, Power, Printer, Pencil, Save, ChevronUp, ChevronDown, ArrowLeft, Check, LayoutGrid, Utensils, Timer, FileText, SkipForward } from 'lucide-react';
 import { format, formatDistanceToNow } from 'date-fns';
 
 interface POSProps {
@@ -23,6 +23,13 @@ const TABLE_ZONES = [
     { name: 'Family AC', tables: [9, 10, 11, 12] },
     { name: 'Garden Patio', tables: [13, 14, 15, 16] }
 ];
+
+// Helper to safely parse dates to avoid "Invalid time value" crashes
+const safeDate = (d: any): Date => {
+    if (!d) return new Date();
+    const date = new Date(d);
+    return isNaN(date.getTime()) ? new Date() : date;
+};
 
 const POS: React.FC<POSProps> = ({ orders, menuItems, onPlaceOrder, onUpdateOrder, onUpdatePayment, onUpdateMenuItem, currentUserName, userRole }) => {
   const [activeView, setActiveView] = useState<'tables' | 'new_order' | 'active_tables' | 'history'>('tables');
@@ -93,7 +100,6 @@ const POS: React.FC<POSProps> = ({ orders, menuItems, onPlaceOrder, onUpdateOrde
       const savedDetails = localStorage.getItem('rms_receipt_details');
       if (savedDetails) {
           const parsed = JSON.parse(savedDetails);
-          // Merge to ensure new fields like fssai exist if missing in old saved data
           setReceiptDetails(prev => ({ ...prev, ...parsed }));
       }
   }, []);
@@ -118,95 +124,67 @@ const POS: React.FC<POSProps> = ({ orders, menuItems, onPlaceOrder, onUpdateOrde
       return Array.from(subs).sort();
   }, [menuItems, selectedCategory]);
 
-  // Reset SubCategory when Category Changes
   useEffect(() => {
       setSelectedSubCategory('All');
   }, [selectedCategory]);
 
-  // Logic to calculate price based on portion (Specific vs Multiplier)
   const getPortionPrice = (item: MenuItem, portion: PortionType): number => {
-      // 1. Check for specific pricing from bulk upload
       if (item.portionPrices && (item.portionPrices.half || item.portionPrices.quarter || item.portionPrices.full)) {
           if (portion === 'Quarter' && item.portionPrices.quarter && item.portionPrices.quarter > 0) return item.portionPrices.quarter;
           if (portion === 'Half' && item.portionPrices.half && item.portionPrices.half > 0) return item.portionPrices.half;
           if (portion === 'Full' && item.portionPrices.full && item.portionPrices.full > 0) return item.portionPrices.full;
       }
       
-      // 2. Fallback for manual items or legacy data without portionPrices
-      // This ensures Half/Quarter options appear even if not explicitly set in the bulk sheet
       const basePrice = item.price || 0;
       if (basePrice > 0) {
           if (portion === 'Full') return basePrice;
-          if (portion === 'Half') return Math.ceil(basePrice * 0.6); // 60% of full
-          if (portion === 'Quarter') return Math.ceil(basePrice * 0.4); // 40% of full
+          if (portion === 'Half') return Math.ceil(basePrice * 0.6);
+          if (portion === 'Quarter') return Math.ceil(basePrice * 0.4);
       }
-      
       return 0;
   };
 
-  // Opens Modal
   const openPortionModal = (item: MenuItem) => {
-    if (item.available === false) return; // Prevent action if out of stock
+    if (item.available === false) return;
     setPortionItem(item);
     
-    // Determine available portions
-    // NOTE: We now allow calculation fallback, so Quarter should appear if Full price exists
     const availablePortions = (['Full', 'Half', 'Quarter'] as PortionType[]).filter(type => getPortionPrice(item, type) > 0);
     
-    // Default to first available option
     if (availablePortions.length > 0) {
         setSelectedPortionType(availablePortions[0]); 
     } else {
-        // Fallback (e.g. if everything is 0, which shouldn't happen for valid items)
         setSelectedPortionType('Full');
     }
     setPortionQuantity(1);
   };
 
-  // Smart Item Click Handler
   const handleItemClick = (item: MenuItem) => {
       if (item.available === false) return;
 
-      // Check if item has portion variations
-      const hasHalf = getPortionPrice(item, 'Half') > 0 && (!item.portionPrices || item.portionPrices.half !== undefined);
-      const hasQuarter = getPortionPrice(item, 'Quarter') > 0 && (!item.portionPrices || item.portionPrices.quarter !== undefined);
-      
-      // Heuristic: If item strictly has only Full price (and others are 0 or undefined in specific structure), add directly.
-      // However, getPortionPrice uses fallback logic. Let's check the specific portionPrices object if it exists.
-      
       let needsModal = false;
       if (item.portionPrices) {
           if ((item.portionPrices.half && item.portionPrices.half > 0) || (item.portionPrices.quarter && item.portionPrices.quarter > 0)) {
               needsModal = true;
           }
-      } else {
-          // If no specific portion mapping, assume standard pricing logic might apply, 
-          // but usually simple items just add. Let's assume simpler items don't need modal unless forced.
-          // For safety in this specific RMS, let's trust the portionPrices object.
-          needsModal = false; 
       }
 
       if (needsModal) {
           openPortionModal(item);
       } else {
-          // Quick Add Full
           const price = getPortionPrice(item, 'Full');
           if (price > 0) {
               addToCart(item, 'Full', price, 1);
           } else {
-              // Fallback if even Full is 0 (shouldn't happen)
               openPortionModal(item);
           }
       }
   };
 
-  // Toggle Item Availability (Manager Only)
   const handleToggleAvailability = (item: MenuItem, e: React.MouseEvent) => {
       e.stopPropagation();
       onUpdateMenuItem({ ...item, available: !item.available });
   };
 
-  // Confirm selection from Modal
   const confirmPortionSelection = () => {
     if (!portionItem) return;
     const finalPrice = getPortionPrice(portionItem, selectedPortionType);
@@ -229,7 +207,6 @@ const POS: React.FC<POSProps> = ({ orders, menuItems, onPlaceOrder, onUpdateOrde
           available: true
       };
 
-      // Add with specific portion string
       addToCart(customItem, customItemPortion, price, qty);
       setShowCustomItemModal(false);
       setCustomItemName('');
@@ -259,7 +236,6 @@ const POS: React.FC<POSProps> = ({ orders, menuItems, onPlaceOrder, onUpdateOrde
   };
 
   const addToCart = (item: MenuItem, portion: string, price: number, qty: number = 1) => {
-    // Generate a unique key for cart items combining ID and portion
     const existingItem = currentCart.find(l => l.menuItemId === item.id && l.portion === portion);
     
     if (existingItem) {
@@ -272,7 +248,7 @@ const POS: React.FC<POSProps> = ({ orders, menuItems, onPlaceOrder, onUpdateOrde
       const newItem: LineItem = {
         id: `l-${Date.now()}-${Math.floor(Math.random()*1000)}`,
         menuItemId: item.id,
-        name: item.name, // Snapshot the name
+        name: item.name,
         quantity: qty,
         priceAtOrder: price,
         portion: portion
@@ -302,7 +278,6 @@ const POS: React.FC<POSProps> = ({ orders, menuItems, onPlaceOrder, onUpdateOrde
       return taxable + taxAmount;
   };
 
-  // Helper for Order Objects
   const getOrderTotal = (order: Order) => {
       return calculateFinalTotal(order.items, order.taxRate || 0, order.discount || 0);
   };
@@ -310,7 +285,6 @@ const POS: React.FC<POSProps> = ({ orders, menuItems, onPlaceOrder, onUpdateOrde
   const constructOrderObject = (status: OrderStatus = OrderStatus.NEW, paymentStatus: PaymentStatus = PaymentStatus.PENDING, method?: PaymentMethod): Order => {
       const tableNum = selectedTable || (Math.floor(Math.random() * 20) + 1);
       
-      // If we are editing, preserve ID and created date
       return {
           id: editingOrder ? editingOrder.id : `o-${Math.floor(Math.random() * 10000)}`,
           tableNumber: tableNum,
@@ -327,48 +301,38 @@ const POS: React.FC<POSProps> = ({ orders, menuItems, onPlaceOrder, onUpdateOrde
 
   const handleKitchenSend = () => {
     if (currentCart.length === 0) return;
-    
     const newOrder = constructOrderObject();
     
     if (editingOrder) {
-        // Update existing order
         onUpdateOrder(newOrder);
     } else {
-        // Place new order
         onPlaceOrder(newOrder);
     }
     
     resetOrderState();
-    
-    // Visual Feedback
     setOrderSentSuccess(true);
     setTimeout(() => {
         setOrderSentSuccess(false);
         setActiveView('tables'); 
         setSelectedTable(null); 
     }, 1500);
-    
     setShowMobileCart(false);
   };
 
   const handleSkipBill = () => {
-      // Just save the cart to the order and go back, but don't change status to paid
       if (currentCart.length === 0) return;
       const orderToSave = constructOrderObject(editingOrder ? editingOrder.status : OrderStatus.NEW);
-      
       if (editingOrder) {
           onUpdateOrder(orderToSave);
       } else {
           onPlaceOrder(orderToSave);
       }
-      
       resetOrderState();
       setActiveView('tables');
       setSelectedTable(null);
   };
 
   const handlePrintOnly = () => {
-      // Just open the print modal without saving/finishing
       const dummyOrder = constructOrderObject();
       setPrintOrder(dummyOrder);
       setShowPrintModal(true);
@@ -378,7 +342,6 @@ const POS: React.FC<POSProps> = ({ orders, menuItems, onPlaceOrder, onUpdateOrde
     let orderToPrint: Order | null = null;
 
     if (existingOrderId) {
-        // Settling an active table directly from Active View
         onUpdatePayment(existingOrderId, method);
         orderToPrint = orders.find(o => o.id === existingOrderId) || null;
         if (orderToPrint) {
@@ -386,13 +349,11 @@ const POS: React.FC<POSProps> = ({ orders, menuItems, onPlaceOrder, onUpdateOrde
         }
         setSettleOrderId(null);
     } else {
-        // Paying for a new/edit order immediately (Takeaway / Quick Serve)
         if (currentCart.length === 0) return;
-        
         const newOrder = constructOrderObject(OrderStatus.NEW, PaymentStatus.PAID, method);
         
         if (editingOrder) {
-            onUpdateOrder(newOrder); // This updates status to PAID via full object update
+            onUpdateOrder(newOrder);
         } else {
             onPlaceOrder(newOrder);
         }
@@ -403,7 +364,6 @@ const POS: React.FC<POSProps> = ({ orders, menuItems, onPlaceOrder, onUpdateOrde
         setSelectedTable(null);
     }
 
-    // Trigger Print Modal
     if (orderToPrint) {
         setPrintOrder(orderToPrint);
         setShowPrintModal(true);
@@ -419,22 +379,17 @@ const POS: React.FC<POSProps> = ({ orders, menuItems, onPlaceOrder, onUpdateOrde
     setEditingOrder(null);
   };
 
-  // --- HELPER FOR TABLES ---
   const getTableStatus = (tableId: number) => {
-      // Find latest active order for this table
-      const activeOrder = orders.find(o => o.tableNumber === tableId && o.paymentStatus === PaymentStatus.PENDING && o.status !== OrderStatus.CANCELLED);
-      return activeOrder;
+      return orders.find(o => o.tableNumber === tableId && o.paymentStatus === PaymentStatus.PENDING && o.status !== OrderStatus.CANCELLED);
   };
 
   const handleTableClick = (tableId: number) => {
       const activeOrder = getTableStatus(tableId);
-      
       if (activeOrder) {
-          setOccupiedTableId(tableId); // Open Options Modal
+          setOccupiedTableId(tableId);
       } else {
-          // Table is free
           setSelectedTable(tableId);
-          setEditingOrder(null); // Ensure fresh start
+          setEditingOrder(null);
           setActiveView('new_order');
       }
   };
@@ -444,7 +399,6 @@ const POS: React.FC<POSProps> = ({ orders, menuItems, onPlaceOrder, onUpdateOrde
       const activeOrder = getTableStatus(occupiedTableId);
       
       if (action === 'add' && activeOrder) {
-          // EDIT MODE: Load existing order into cart
           setSelectedTable(occupiedTableId);
           setEditingOrder(activeOrder);
           setCurrentCart([...activeOrder.items]);
@@ -452,14 +406,12 @@ const POS: React.FC<POSProps> = ({ orders, menuItems, onPlaceOrder, onUpdateOrde
           setManualDiscount(activeOrder.discount?.toString() || '');
           setActiveView('new_order');
       } else if (action === 'settle' && activeOrder) {
-          // SETTLE MODE: Use new_order view WITHOUT opening payment options immediately
-          // This allows users to see 'Print Bill' or 'Save Draft' before clicking 'Pay'.
           setSelectedTable(occupiedTableId);
           setEditingOrder(activeOrder);
           setCurrentCart([...activeOrder.items]);
           setManualTaxRate(activeOrder.taxRate?.toString() || '');
           setManualDiscount(activeOrder.discount?.toString() || '');
-          setShowPaymentOptions(false); // Changed to false to allow preview/print
+          setShowPaymentOptions(false);
           setActiveView('new_order');
       }
       setOccupiedTableId(null);
@@ -470,7 +422,7 @@ const POS: React.FC<POSProps> = ({ orders, menuItems, onPlaceOrder, onUpdateOrde
       const activeOrder = getTableStatus(occupiedTableId);
       
       if (activeOrder) {
-          if (confirm(`Are you sure you want to CANCEL the order for Table ${occupiedTableId}? This action cannot be undone.`)) {
+          if (confirm(`Are you sure you want to CANCEL the order for Table ${occupiedTableId}?`)) {
              onUpdateOrder({
                  ...activeOrder,
                  status: OrderStatus.CANCELLED,
@@ -481,20 +433,13 @@ const POS: React.FC<POSProps> = ({ orders, menuItems, onPlaceOrder, onUpdateOrde
       }
   };
 
-
   const filteredItems = menuItems.filter(i => {
-      // 1. Availability Check (Hide sold out unless toggle is on)
       if (!showSoldOut && i.available === false) return false;
-
-      // 2. Category & Search & SubCategory
       const matchesCategory = selectedCategory === 'All' || i.category === selectedCategory;
       const matchesSubCategory = selectedSubCategory === 'All' || i.subCategory === selectedSubCategory;
       const matchesSearch = i.name.toLowerCase().includes(searchQuery.toLowerCase());
-      
       return matchesCategory && matchesSubCategory && matchesSearch;
   });
-
-  // --- VIEWS ---
 
   const renderTablesView = () => {
       return (
@@ -504,6 +449,12 @@ const POS: React.FC<POSProps> = ({ orders, menuItems, onPlaceOrder, onUpdateOrde
                        <LayoutGrid className="text-blue-600" /> Table Management
                    </h2>
                    <div className="flex items-center gap-4 text-sm">
+                       <button 
+                           onClick={() => setActiveView('history')}
+                           className="flex items-center gap-2 bg-white border border-slate-200 text-slate-600 px-3 py-2 rounded-lg hover:bg-slate-50 font-bold shadow-sm transition-colors"
+                       >
+                           <Clock size={16} /> History & Unpaid
+                       </button>
                        <div className="flex items-center gap-2">
                            <div className="w-4 h-4 bg-white border border-slate-300 rounded"></div>
                            <span className="text-slate-600">Available</span>
@@ -545,7 +496,7 @@ const POS: React.FC<POSProps> = ({ orders, menuItems, onPlaceOrder, onUpdateOrde
                                                    </span>
                                                    <span className="text-[10px] text-slate-500 flex items-center gap-1 font-mono">
                                                        <Timer size={10} />
-                                                       {formatDistanceToNow(activeOrder.createdAt).replace('about ', '').replace(' minutes', 'm')}
+                                                       {formatDistanceToNow(safeDate(activeOrder.createdAt)).replace('about ', '').replace(' minutes', 'm')}
                                                    </span>
                                                </div>
                                            ) : (
@@ -561,7 +512,6 @@ const POS: React.FC<POSProps> = ({ orders, menuItems, onPlaceOrder, onUpdateOrde
                    ))}
                </div>
 
-               {/* Occupied Table Action Modal */}
                {occupiedTableId && (
                    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm animate-in fade-in">
                        <div className="bg-white p-6 rounded-2xl shadow-2xl w-96 max-w-sm">
@@ -596,8 +546,109 @@ const POS: React.FC<POSProps> = ({ orders, menuItems, onPlaceOrder, onUpdateOrde
       );
   };
 
+  const renderHistoryView = () => {
+      const servedUnpaid = orders.filter(o => o.status === OrderStatus.SERVED && o.paymentStatus === PaymentStatus.PENDING);
+      const recentPaid = orders
+          .filter(o => o.paymentStatus === PaymentStatus.PAID)
+          .sort((a, b) => safeDate(b.createdAt).getTime() - safeDate(a.createdAt).getTime())
+          .slice(0, 15);
+
+      const handleSettleHistory = (order: Order) => {
+          setSelectedTable(order.tableNumber);
+          setEditingOrder(order);
+          setCurrentCart([...order.items]);
+          setManualTaxRate(order.taxRate?.toString() || '');
+          setManualDiscount(order.discount?.toString() || '');
+          setShowPaymentOptions(false); 
+          setActiveView('new_order');
+      };
+
+      return (
+          <div className="h-full bg-slate-50 p-4 overflow-y-auto">
+              <div className="flex items-center gap-4 mb-6">
+                  <button onClick={() => setActiveView('tables')} className="p-2 hover:bg-slate-200 rounded-full text-slate-600 transition-colors">
+                      <ArrowLeft size={24} />
+                  </button>
+                  <h2 className="text-2xl font-bold text-slate-800">Transactions & Pending Bills</h2>
+              </div>
+
+              <div className="mb-8">
+                  <h3 className="text-lg font-bold text-slate-700 mb-3 flex items-center gap-2">
+                      <AlertCircle className="text-amber-500" /> Pending Settlements (Served)
+                  </h3>
+                  {servedUnpaid.length === 0 ? (
+                      <div className="bg-white p-6 rounded-xl border border-slate-200 text-slate-400 text-center text-sm">
+                          All served orders have been settled.
+                      </div>
+                  ) : (
+                      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                          {servedUnpaid.map(order => (
+                              <div key={order.id} className="bg-white p-4 rounded-xl shadow-sm border-l-4 border-amber-500 flex flex-col justify-between animate-in fade-in slide-in-from-bottom-2">
+                                  <div>
+                                      <div className="flex justify-between items-start mb-2">
+                                          <span className="font-bold text-lg text-slate-800">Table #{order.tableNumber}</span>
+                                          <span className="bg-amber-100 text-amber-800 text-xs px-2 py-1 rounded font-bold uppercase tracking-wide">Unpaid</span>
+                                      </div>
+                                      <div className="text-sm text-slate-500 mb-1 font-medium">
+                                          Server: {order.serverName}
+                                      </div>
+                                      <div className="text-xs text-slate-400 flex items-center gap-1">
+                                          <Clock size={12} /> Served: {order.completedAt ? formatDistanceToNow(safeDate(order.completedAt), { addSuffix: true }) : 'Recently'}
+                                      </div>
+                                  </div>
+                                  <div className="mt-4 flex justify-between items-center border-t border-slate-100 pt-3">
+                                      <span className="font-bold text-xl text-slate-900">₹{getOrderTotal(order).toFixed(0)}</span>
+                                      <button 
+                                          onClick={() => handleSettleHistory(order)}
+                                          className="bg-slate-800 text-white px-4 py-2 rounded-lg text-sm font-bold hover:bg-slate-900 flex items-center gap-2 shadow-md transition-all active:scale-95"
+                                      >
+                                          <Receipt size={16} /> Settle Bill
+                                      </button>
+                                  </div>
+                              </div>
+                          ))}
+                      </div>
+                  )}
+              </div>
+
+              <div>
+                  <h3 className="text-lg font-bold text-slate-700 mb-3 flex items-center gap-2">
+                      <CheckCircle className="text-green-500" /> Recent Paid Transactions
+                  </h3>
+                  <div className="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden">
+                      <table className="w-full text-left">
+                          <thead className="bg-slate-100 border-b border-slate-200">
+                              <tr>
+                                  <th className="p-4 text-xs font-bold text-slate-500 uppercase">Order ID</th>
+                                  <th className="p-4 text-xs font-bold text-slate-500 uppercase">Table</th>
+                                  <th className="p-4 text-xs font-bold text-slate-500 uppercase">Time</th>
+                                  <th className="p-4 text-xs font-bold text-slate-500 uppercase">Total</th>
+                                  <th className="p-4 text-xs font-bold text-slate-500 uppercase">Method</th>
+                              </tr>
+                          </thead>
+                          <tbody className="divide-y divide-slate-100">
+                              {recentPaid.length === 0 ? (
+                                  <tr><td colSpan={5} className="p-8 text-center text-slate-400 text-sm">No recent transactions.</td></tr>
+                              ) : (
+                                  recentPaid.map(order => (
+                                      <tr key={order.id} className="hover:bg-slate-50 transition-colors">
+                                          <td className="p-4 text-sm font-mono text-slate-600">#{order.id.split('-')[1] || order.id}</td>
+                                          <td className="p-4 text-sm font-bold text-slate-800">{order.tableNumber || 'Takeaway'}</td>
+                                          <td className="p-4 text-sm text-slate-500">{format(safeDate(order.createdAt), 'HH:mm')}</td>
+                                          <td className="p-4 text-sm font-bold text-green-600">₹{getOrderTotal(order).toFixed(2)}</td>
+                                          <td className="p-4 text-sm text-slate-500 uppercase font-medium">{order.paymentMethod}</td>
+                                      </tr>
+                                  ))
+                              )}
+                          </tbody>
+                      </table>
+                  </div>
+              </div>
+          </div>
+      );
+  };
+
   const renderNewOrderView = () => {
-    // ... existing renderNewOrderView logic ...
     const subtotal = calculateSubtotal();
     const discount = parseFloat(manualDiscount) || 0;
     const taxRate = parseFloat(manualTaxRate) || 0;
@@ -607,9 +658,14 @@ const POS: React.FC<POSProps> = ({ orders, menuItems, onPlaceOrder, onUpdateOrde
 
     return (
     <div className="flex flex-col lg:flex-row h-full gap-4 lg:gap-6 overflow-hidden relative">
-      {/* Menu Grid - Hidden on mobile if cart is showing */}
       <div className={`flex-1 flex flex-col min-w-0 h-full ${showMobileCart ? 'hidden lg:flex' : 'flex'}`}>
         <div className="flex flex-wrap items-center gap-2 mb-4">
+             {activeView === 'new_order' && selectedTable && (
+                 <button onClick={() => { setActiveView('tables'); setSelectedTable(null); setEditingOrder(null); }} className="lg:hidden p-2 bg-slate-100 rounded-lg text-slate-600 mr-2">
+                     <ArrowLeft size={20} />
+                 </button>
+             )}
+
              <div className="relative flex-1 min-w-[200px]">
                  <Search className="absolute left-3 top-2.5 text-slate-400" size={20} />
                  <input 
@@ -626,7 +682,6 @@ const POS: React.FC<POSProps> = ({ orders, menuItems, onPlaceOrder, onUpdateOrde
                  )}
              </div>
              
-             {/* Toggle Sold Out (Visibility) */}
              <button 
                 onClick={() => setShowSoldOut(!showSoldOut)}
                 className={`px-3 py-2 rounded-lg text-sm font-bold flex items-center gap-2 border transition-colors ${
@@ -647,7 +702,6 @@ const POS: React.FC<POSProps> = ({ orders, menuItems, onPlaceOrder, onUpdateOrde
              </button>
         </div>
 
-        {/* Main Categories */}
         <div className="flex gap-2 flex-wrap mb-2 pb-1">
             {categories.map(cat => (
                 <button
@@ -664,7 +718,6 @@ const POS: React.FC<POSProps> = ({ orders, menuItems, onPlaceOrder, onUpdateOrde
             ))}
         </div>
 
-        {/* Sub Categories (Shown only if available for selected category) */}
         {subCategories.length > 0 && (
             <div className="flex gap-2 flex-wrap mb-4 pb-1 animate-in fade-in slide-in-from-top-1">
                 <button
@@ -708,7 +761,6 @@ const POS: React.FC<POSProps> = ({ orders, menuItems, onPlaceOrder, onUpdateOrde
             >
               <div>
                 <h3 className={`font-bold text-sm lg:text-base text-slate-800 leading-tight flex flex-wrap items-center gap-2 ${!isOutOfStock && 'group-hover:text-blue-600'}`}>
-                    {/* Visual Indicators for Veg/Non-Veg */}
                     {item.isVeg !== undefined && (
                          <span className={`min-w-3 w-3 h-3 rounded-full border ${item.isVeg ? 'border-green-600 bg-green-500' : 'border-red-600 bg-red-500'}`}></span>
                     )}
@@ -727,7 +779,6 @@ const POS: React.FC<POSProps> = ({ orders, menuItems, onPlaceOrder, onUpdateOrde
                         <Ban size={10} /> SOLD OUT
                     </span>
                 ) : (
-                    // Plus button essentially does the same smart check now, but allows direct quick add
                     <button
                     onClick={(e) => { e.stopPropagation(); handleItemClick(item); }}
                     className="w-8 h-8 rounded-full bg-blue-50 text-blue-600 flex items-center justify-center hover:bg-blue-600 hover:text-white transition-colors"
@@ -738,7 +789,6 @@ const POS: React.FC<POSProps> = ({ orders, menuItems, onPlaceOrder, onUpdateOrde
                 )}
               </div>
               
-              {/* Manager Quick Action: Toggle Availability */}
               {userRole === UserRole.MANAGER && (
                   <button 
                       onClick={(e) => handleToggleAvailability(item, e)}
@@ -749,7 +799,6 @@ const POS: React.FC<POSProps> = ({ orders, menuItems, onPlaceOrder, onUpdateOrde
                   </button>
               )}
 
-              {/* Overlay for whole card click feedback */}
               <div className="absolute inset-0 bg-transparent group-active:bg-slate-100/50 pointer-events-none" />
             </div>
           )})}
@@ -765,7 +814,6 @@ const POS: React.FC<POSProps> = ({ orders, menuItems, onPlaceOrder, onUpdateOrde
         </div>
       </div>
 
-      {/* Floating Action Button for Mobile Cart */}
       {!showMobileCart && currentCart.length > 0 && (
           <div className="lg:hidden fixed bottom-6 left-4 right-4 z-40">
               <button 
@@ -786,12 +834,10 @@ const POS: React.FC<POSProps> = ({ orders, menuItems, onPlaceOrder, onUpdateOrde
           </div>
       )}
 
-      {/* Current Cart - Responsive Behavior */}
       <div className={`
             lg:w-96 bg-white flex flex-col border border-slate-200 shadow-xl lg:rounded-2xl
             ${showMobileCart ? 'fixed inset-0 z-50 w-full rounded-none animate-in slide-in-from-bottom-10' : 'hidden lg:flex h-full rounded-2xl'}
       `}>
-        {/* Mobile Header for Cart */}
         {showMobileCart && (
             <div className="p-4 bg-slate-900 text-white flex items-center justify-between lg:hidden">
                 <button onClick={() => setShowMobileCart(false)} className="flex items-center gap-2 text-slate-300 hover:text-white">
@@ -824,7 +870,6 @@ const POS: React.FC<POSProps> = ({ orders, menuItems, onPlaceOrder, onUpdateOrde
             </div>
           ) : (
             currentCart.map(item => {
-              // Prefer snapshotted name, then lookup, then fallback
               const displayName = item.name || menuItems.find(m => m.id === item.menuItemId)?.name || 'Unknown Item';
               
               return (
@@ -852,8 +897,6 @@ const POS: React.FC<POSProps> = ({ orders, menuItems, onPlaceOrder, onUpdateOrde
         </div>
 
         <div className="p-6 bg-slate-50 border-t border-slate-200 rounded-b-none lg:rounded-b-2xl space-y-3 pb-safe-area">
-          
-          {/* Custom Item Quick Add */}
           <div className="mb-3 p-3 bg-white rounded-lg border border-slate-200 shadow-sm">
               <div className="flex justify-between items-center mb-2">
                   <span className="text-xs font-bold text-slate-500 uppercase flex items-center gap-1">
@@ -897,7 +940,6 @@ const POS: React.FC<POSProps> = ({ orders, menuItems, onPlaceOrder, onUpdateOrde
               </div>
           </div>
 
-          {/* Discount & Tax Inputs */}
           <div className="grid grid-cols-2 gap-3 mb-2">
               <div>
                   <label className="block text-xs font-bold text-slate-500 mb-1 flex items-center gap-1">
@@ -944,7 +986,6 @@ const POS: React.FC<POSProps> = ({ orders, menuItems, onPlaceOrder, onUpdateOrde
             <span>₹{total.toFixed(2)}</span>
           </div>
           
-          {/* Action Buttons */}
           {!showPaymentOptions ? (
               <div className="flex flex-col gap-2 pt-2">
                 <div className="grid grid-cols-2 gap-2">
@@ -1019,8 +1060,8 @@ const POS: React.FC<POSProps> = ({ orders, menuItems, onPlaceOrder, onUpdateOrde
     <div className="h-full w-full relative">
        {activeView === 'tables' && renderTablesView()}
        {(activeView === 'new_order' || activeView === 'active_tables') && renderNewOrderView()}
+       {activeView === 'history' && renderHistoryView()}
        
-       {/* Modals */}
        {portionItem && (
           <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/50 backdrop-blur-sm animate-in fade-in duration-200">
               <div className="bg-white rounded-2xl shadow-2xl p-6 w-96 transform transition-all scale-100">
@@ -1040,11 +1081,9 @@ const POS: React.FC<POSProps> = ({ orders, menuItems, onPlaceOrder, onUpdateOrde
                   </div>
                   
                   <div className="space-y-6">
-                      {/* Portion Segmented Control */}
                       <div>
                           <label className="text-xs font-bold text-slate-500 uppercase mb-2 block">Portion Size</label>
                           <div className="flex p-1 bg-slate-100 rounded-xl">
-                            {/* Force display of Full, Half, Quarter if price > 0 OR fallback logic exists */}
                             {(['Full', 'Half', 'Quarter'] as PortionType[])
                                 .filter(type => getPortionPrice(portionItem, type) > 0)
                                 .map((type) => {
@@ -1070,7 +1109,6 @@ const POS: React.FC<POSProps> = ({ orders, menuItems, onPlaceOrder, onUpdateOrde
                           </div>
                       </div>
 
-                      {/* Quantity Selector */}
                       <div className="bg-slate-50 p-4 rounded-xl border border-slate-100">
                           <label className="text-xs font-bold text-slate-500 uppercase mb-2 block">Quantity</label>
                           <div className="flex items-center justify-center gap-4">
@@ -1181,7 +1219,6 @@ const POS: React.FC<POSProps> = ({ orders, menuItems, onPlaceOrder, onUpdateOrde
                   id="printable-receipt"
                   className="bg-white p-4 rounded-none w-[320px] shadow-2xl flex flex-col text-black relative font-mono text-sm print:w-full print:shadow-none print:absolute print:inset-0"
               >
-                  {/* Close button - visible only on screen */}
                   <button onClick={() => setShowPrintModal(false)} className="absolute top-2 right-2 text-slate-400 hover:text-slate-600 print-hidden bg-slate-100 p-1 rounded-full z-10">
                       <X size={16}/>
                   </button>

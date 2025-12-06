@@ -1,8 +1,8 @@
 
 import React, { useState, useMemo, useRef, useEffect } from 'react';
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid, PieChart, Pie, Cell, Legend, AreaChart, Area } from 'recharts';
-import { Order, Expense, UserRole, MenuItem, Ingredient, PaymentStatus, OrderStatus } from '../types';
-import { DollarSign, TrendingDown, Clock, PieChart as PieChartIcon, Calendar, Filter, Download, Upload, Server, Activity, Loader2, Database, PlayCircle, CheckCircle, AlertTriangle, Wifi, WifiOff, Globe, Link, FileText } from 'lucide-react';
+import { Order, Expense, UserRole, MenuItem, Ingredient, PaymentStatus, OrderStatus, PaymentMethod } from '../types';
+import { DollarSign, TrendingDown, Clock, PieChart as PieChartIcon, Calendar, Filter, Download, Upload, Server, Activity, Loader2, Database, PlayCircle, CheckCircle, AlertTriangle, Wifi, WifiOff, Globe, Link, FileText, Banknote, Smartphone } from 'lucide-react';
 import { startOfDay, endOfDay, isWithinInterval, format, subDays, startOfMonth, endOfMonth } from 'date-fns';
 import { isDatabaseLive, setApiUrl, disconnect, getApiUrl } from '../services/db';
 import { APP_DATA_VERSION } from '../constants';
@@ -102,20 +102,31 @@ const Dashboard: React.FC<DashboardProps> = ({ orders, expenses = [], allData, o
   }, [orders, expenses, filterType, customStart, customEnd]);
 
   const metrics = useMemo(() => {
-      const revenue = filteredData.orders.reduce((acc, o) => {
+      let revenue = 0;
+      let cashSales = 0;
+      let onlineSales = 0;
+
+      filteredData.orders.forEach(o => {
           const subtotal = o.items.reduce((sum, i) => sum + (i.priceAtOrder * i.quantity), 0);
           const taxable = Math.max(0, subtotal - (o.discount || 0));
           const taxAmount = taxable * ((o.taxRate || 0) / 100);
           const total = taxable + taxAmount;
-          return acc + total;
-      }, 0);
+          
+          revenue += total;
+
+          if (o.paymentMethod === PaymentMethod.CASH) {
+              cashSales += total;
+          } else if (o.paymentMethod === PaymentMethod.ONLINE) {
+              onlineSales += total;
+          }
+      });
 
       const totalExpenses = filteredData.expenses.reduce((acc, e) => acc + e.amount, 0);
       const profit = revenue - totalExpenses;
       const orderCount = filteredData.orders.length;
       const aov = orderCount > 0 ? revenue / orderCount : 0;
 
-      return { revenue, totalExpenses, profit, orderCount, aov };
+      return { revenue, totalExpenses, profit, orderCount, aov, cashSales, onlineSales };
   }, [filteredData]);
 
   const chartData = useMemo(() => {
@@ -336,13 +347,25 @@ const Dashboard: React.FC<DashboardProps> = ({ orders, expenses = [], allData, o
 
           <div className="bg-white p-5 rounded-xl shadow-sm border border-slate-200 flex flex-col justify-between">
               <div>
-                  <p className="text-xs font-bold text-slate-400 uppercase tracking-wider">Net Profit</p>
-                  <h3 className={`text-3xl font-bold mt-2 ${metrics.profit >= 0 ? 'text-green-600' : 'text-red-500'}`}>
-                      ₹{metrics.profit.toLocaleString('en-IN')}
+                  <p className="text-xs font-bold text-slate-400 uppercase tracking-wider">Cash Sales</p>
+                  <h3 className="text-3xl font-bold text-slate-800 mt-2">
+                      ₹{metrics.cashSales.toLocaleString('en-IN')}
                   </h3>
               </div>
-              <div className="mt-4 flex items-center text-xs font-medium text-slate-500">
-                  Total Expenses: ₹{metrics.totalExpenses.toLocaleString('en-IN')}
+              <div className="mt-4 flex items-center text-xs font-medium text-green-600">
+                  <Banknote size={14} className="mr-1" /> {(metrics.revenue > 0 ? (metrics.cashSales / metrics.revenue * 100) : 0).toFixed(0)}%
+              </div>
+          </div>
+
+          <div className="bg-white p-5 rounded-xl shadow-sm border border-slate-200 flex flex-col justify-between">
+              <div>
+                  <p className="text-xs font-bold text-slate-400 uppercase tracking-wider">Online Sales</p>
+                  <h3 className="text-3xl font-bold text-slate-800 mt-2">
+                      ₹{metrics.onlineSales.toLocaleString('en-IN')}
+                  </h3>
+              </div>
+              <div className="mt-4 flex items-center text-xs font-medium text-purple-600">
+                  <Smartphone size={14} className="mr-1" /> {(metrics.revenue > 0 ? (metrics.onlineSales / metrics.revenue * 100) : 0).toFixed(0)}%
               </div>
           </div>
 
@@ -353,18 +376,6 @@ const Dashboard: React.FC<DashboardProps> = ({ orders, expenses = [], allData, o
               </div>
               <div className="mt-4 flex items-center text-xs font-medium text-blue-600">
                   <Clock size={14} className="mr-1" /> Per Transaction
-              </div>
-          </div>
-
-          <div className="bg-white p-5 rounded-xl shadow-sm border border-slate-200 flex flex-col justify-between">
-              <div>
-                  <p className="text-xs font-bold text-slate-400 uppercase tracking-wider">Inventory Value</p>
-                  <h3 className="text-3xl font-bold text-slate-800 mt-2">
-                      ₹{allData?.ingredients?.reduce((acc, i) => acc + (i.unitCost * i.stockQuantity), 0).toLocaleString('en-IN') || 0}
-                  </h3>
-              </div>
-              <div className="mt-4 flex items-center text-xs font-medium text-amber-600">
-                  {allData?.ingredients?.filter(i => i.stockQuantity < 50).length || 0} Items Low Stock
               </div>
           </div>
       </div>
