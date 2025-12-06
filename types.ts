@@ -44,6 +44,7 @@ export interface User {
   id: string;
   name: string;
   email: string;
+  password?: string; // Added password field
   role: UserRole;
   permissions?: string[]; // List of module IDs (e.g., 'pos', 'kds')
 }

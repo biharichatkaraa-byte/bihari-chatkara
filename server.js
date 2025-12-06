@@ -78,7 +78,16 @@ const initDb = async (retries = 10, delay = 5000) => {
             console.log(`[DB] MySQL Connected Successfully to '${DB_CONFIG.database}'.`);
             
             // Initialize Schema
-            await connection.query(`CREATE TABLE IF NOT EXISTS users (id VARCHAR(50) PRIMARY KEY, name VARCHAR(100), email VARCHAR(100), role VARCHAR(50), permissions TEXT)`);
+            await connection.query(`CREATE TABLE IF NOT EXISTS users (id VARCHAR(50) PRIMARY KEY, name VARCHAR(100), email VARCHAR(100), role VARCHAR(50), permissions TEXT, password VARCHAR(100))`);
+            
+            // Migration: Check if password column exists in users table (for existing DBs)
+            try {
+                await connection.query(`SELECT password FROM users LIMIT 1`);
+            } catch (err) {
+                console.log("[DB] Adding missing 'password' column to users table...");
+                await connection.query(`ALTER TABLE users ADD COLUMN password VARCHAR(100)`);
+            }
+
             await connection.query(`CREATE TABLE IF NOT EXISTS menu_items (id VARCHAR(50) PRIMARY KEY, category_id VARCHAR(50), sub_category_id VARCHAR(50), name VARCHAR(100), category VARCHAR(100), price DECIMAL(10, 2), description TEXT, is_veg TINYINT(1), available TINYINT(1), ingredients TEXT, portion_prices TEXT, tags TEXT)`);
             await connection.query(`CREATE TABLE IF NOT EXISTS ingredients (id VARCHAR(50) PRIMARY KEY, name VARCHAR(100), category VARCHAR(100), unit VARCHAR(20), unit_cost DECIMAL(10, 2), stock_quantity DECIMAL(10, 2))`);
             await connection.query(`CREATE TABLE IF NOT EXISTS orders (id VARCHAR(50) PRIMARY KEY, table_number INT, server_name VARCHAR(100), status VARCHAR(50), payment_status VARCHAR(50), payment_method VARCHAR(50), created_at VARCHAR(64), tax_rate DECIMAL(5, 2), discount DECIMAL(10, 2))`);
@@ -90,14 +99,13 @@ const initDb = async (retries = 10, delay = 5000) => {
             // --- SEEDING ---
             const [userRows] = await connection.query('SELECT count(*) as count FROM users');
             if (Number(userRows[0].count) === 0) {
-                await connection.query('INSERT INTO users (id, name, email, role, permissions) VALUES (?, ?, ?, ?, ?)', ['u1', 'Administrator', 'admin@biharichatkara.com', 'Manager', '[]']);
+                await connection.query('INSERT INTO users (id, name, email, role, permissions, password) VALUES (?, ?, ?, ?, ?, ?)', ['u1', 'Administrator', 'admin@biharichatkara.com', 'Manager', '[]', 'admin123']);
             }
             const [ingRows] = await connection.query('SELECT count(*) as count FROM ingredients');
             if (Number(ingRows[0].count) === 0) {
                 for (const i of SEED_INGREDIENTS) await connection.query('INSERT INTO ingredients (id, name, category, unit, unit_cost, stock_quantity) VALUES (?, ?, ?, ?, ?, ?)', [i.id, i.name, i.category, i.unit, i.unitCost, i.stockQuantity]);
             }
-            // Skip Menu seeding for brevity in this update, assuming it's done or handled by prior logic
-
+            
             connection.release();
             dbError = null;
             isDbInitialized = true;
@@ -295,13 +303,16 @@ api.post('/ingredients', async (req, res) => {
 api.put('/ingredients/:id', async (req, res) => {
     try { const i = req.body; await pool.query('UPDATE ingredients SET name=?, category=?, unit=?, unit_cost=?, stock_quantity=? WHERE id=?', [i.name, i.category, i.unit, i.unitCost, i.stockQuantity, req.params.id]); res.json({ success: true }); } catch (e) { res.status(500).json({ error: e.message }); }
 });
+api.delete('/ingredients/:id', async (req, res) => {
+    try { await pool.query('DELETE FROM ingredients WHERE id = ?', [req.params.id]); res.json({ success: true }); } catch (e) { res.status(500).json({ error: e.message }); }
+});
 
 // Users
 api.get('/users', async (req, res) => {
     try { const [rows] = await pool.query('SELECT * FROM users'); res.json(rows.map(r => parseRow(r, ['permissions']))); } catch (e) { res.status(500).json({ error: e.message }); }
 });
 api.post('/users', async (req, res) => {
-    try { const u = req.body; await pool.query('INSERT INTO users (id, name, email, role, permissions) VALUES (?, ?, ?, ?, ?)', [u.id, u.name, u.email, u.role, JSON.stringify(u.permissions||[])]); res.json({ success: true }); } catch (e) { res.status(500).json({ error: e.message }); }
+    try { const u = req.body; await pool.query('INSERT INTO users (id, name, email, role, permissions, password) VALUES (?, ?, ?, ?, ?, ?)', [u.id, u.name, u.email, u.role, JSON.stringify(u.permissions||[]), u.password]); res.json({ success: true }); } catch (e) { res.status(500).json({ error: e.message }); }
 });
 api.delete('/users/:id', async (req, res) => {
     try { await pool.query('DELETE FROM users WHERE id = ?', [req.params.id]); res.json({ success: true }); } catch (e) { res.status(500).json({ error: e.message }); }

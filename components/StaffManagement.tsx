@@ -1,7 +1,7 @@
 
 import React, { useState } from 'react';
 import { User, UserRole } from '../types';
-import { Trash2, UserPlus, Shield, Mail, CheckSquare, Square } from 'lucide-react';
+import { Trash2, UserPlus, Shield, Mail, CheckSquare, Square, Lock, Eye, EyeOff } from 'lucide-react';
 
 interface StaffManagementProps {
   users: User[];
@@ -24,9 +24,11 @@ const StaffManagement: React.FC<StaffManagementProps> = ({ users, onAddUser, onD
   const [isAdding, setIsAdding] = useState(false);
   const [newName, setNewName] = useState('');
   const [newEmail, setNewEmail] = useState('');
+  const [newPassword, setNewPassword] = useState('');
   const [newRole, setNewRole] = useState<UserRole>(UserRole.SERVER);
   const [customPermissions, setCustomPermissions] = useState<string[]>([]);
   const [useCustomPerms, setUseCustomPerms] = useState(false);
+  const [showPasswords, setShowPasswords] = useState<Record<string, boolean>>({});
 
   const togglePermission = (moduleId: string) => {
       setCustomPermissions(prev => 
@@ -36,13 +38,18 @@ const StaffManagement: React.FC<StaffManagementProps> = ({ users, onAddUser, onD
       );
   };
 
+  const togglePasswordVisibility = (id: string) => {
+      setShowPasswords(prev => ({ ...prev, [id]: !prev[id] }));
+  };
+
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    if (newName && newEmail) {
+    if (newName && newEmail && newPassword) {
       const newUser: User = {
         id: `u-${Date.now()}`,
         name: newName,
         email: newEmail,
+        password: newPassword,
         role: newRole,
         permissions: useCustomPerms ? customPermissions : undefined // Only attach if custom toggle is on
       };
@@ -52,6 +59,7 @@ const StaffManagement: React.FC<StaffManagementProps> = ({ users, onAddUser, onD
       setIsAdding(false);
       setNewName('');
       setNewEmail('');
+      setNewPassword('');
       setNewRole(UserRole.SERVER);
       setCustomPermissions([]);
       setUseCustomPerms(false);
@@ -77,7 +85,7 @@ const StaffManagement: React.FC<StaffManagementProps> = ({ users, onAddUser, onD
         <div className="bg-white p-6 rounded-xl shadow-sm border border-slate-200 animate-in fade-in slide-in-from-top-4 duration-300">
           <h3 className="font-bold text-lg mb-4 text-slate-800">New Staff Member Details</h3>
           <form onSubmit={handleSubmit} className="space-y-6">
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
                 <div>
                 <label className="block text-sm font-medium text-slate-700 mb-1">Full Name</label>
                 <input
@@ -97,6 +105,17 @@ const StaffManagement: React.FC<StaffManagementProps> = ({ users, onAddUser, onD
                     onChange={(e) => setNewEmail(e.target.value)}
                     className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500"
                     placeholder="email@biharichatkara.com"
+                    required
+                />
+                </div>
+                <div>
+                <label className="block text-sm font-medium text-slate-700 mb-1">Password</label>
+                <input
+                    type="text"
+                    value={newPassword}
+                    onChange={(e) => setNewPassword(e.target.value)}
+                    className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 font-mono"
+                    placeholder="Set Password"
                     required
                 />
                 </div>
@@ -173,6 +192,7 @@ const StaffManagement: React.FC<StaffManagementProps> = ({ users, onAddUser, onD
             <tr>
               <th className="px-6 py-4 font-semibold text-slate-600 text-sm">Employee</th>
               <th className="px-6 py-4 font-semibold text-slate-600 text-sm">Role / Access</th>
+              <th className="px-6 py-4 font-semibold text-slate-600 text-sm">Credentials</th>
               <th className="px-6 py-4 font-semibold text-slate-600 text-sm">Status</th>
               <th className="px-6 py-4 font-semibold text-slate-600 text-sm text-right">Actions</th>
             </tr>
@@ -211,6 +231,21 @@ const StaffManagement: React.FC<StaffManagementProps> = ({ users, onAddUser, onD
                           </span>
                       )}
                   </div>
+                </td>
+                <td className="px-6 py-4">
+                    <div className="flex items-center gap-2 text-sm text-slate-600">
+                        <Lock size={14} className="text-slate-400" />
+                        <span className="font-mono">
+                            {showPasswords[user.id] ? (user.password || '******') : '••••••'}
+                        </span>
+                        <button 
+                            onClick={() => togglePasswordVisibility(user.id)} 
+                            className="text-slate-400 hover:text-blue-600"
+                            title="Show/Hide Password"
+                        >
+                            {showPasswords[user.id] ? <EyeOff size={14} /> : <Eye size={14} />}
+                        </button>
+                    </div>
                 </td>
                 <td className="px-6 py-4">
                   <span className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded text-xs font-medium bg-green-100 text-green-700">
