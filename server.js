@@ -324,7 +324,7 @@ api.post('/orders', async (req, res) => {
         await connection.beginTransaction();
         await connection.query('INSERT INTO orders (id, table_number, server_name, status, payment_status, payment_method, created_at, tax_rate, discount) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)', [o.id, o.tableNumber, o.serverName, o.status, o.paymentStatus, o.paymentMethod, new Date(o.createdAt).toISOString(), o.taxRate, o.discount]);
         if (o.items?.length > 0) {
-            for (const i of o.items) await connection.query('INSERT INTO order_items (id, order_id, menu_item_id, name, quantity, price_at_order, portion, modifiers) VALUES (?, ?, ?, ?, ?, ?, ?, ?)', [i.id, o.id, i.menuItemId, i.name, i.quantity, i.priceAtOrder || 0, i.portion, JSON.stringify(i.modifiers || [])]);
+            for (const i of o.items) await connection.query('INSERT INTO order_items (id, order_id, menu_item_id, name, quantity, price_at_order, portion, modifiers) VALUES (?, ?, ?, ?, ?, ?, ?, ?)', [i.id, o.id, i.menuItemId, i.name, i.quantity, (i.priceAtOrder !== undefined ? i.priceAtOrder : 0), i.portion, JSON.stringify(i.modifiers || [])]);
         }
         await connection.commit();
         res.json({ success: true });
@@ -343,7 +343,7 @@ api.put('/orders/:id', async (req, res) => {
             if (o.items.length > 0) {
                 for (const i of o.items) {
                     await connection.query('INSERT INTO order_items (id, order_id, menu_item_id, name, quantity, price_at_order, portion, modifiers) VALUES (?, ?, ?, ?, ?, ?, ?, ?)', 
-                        [i.id, req.params.id, i.menuItemId, i.name, i.quantity, i.priceAtOrder || 0, i.portion, JSON.stringify(i.modifiers || [])]
+                        [i.id, req.params.id, i.menuItemId, i.name, i.quantity, (i.priceAtOrder !== undefined ? i.priceAtOrder : 0), i.portion, JSON.stringify(i.modifiers || [])]
                     );
                 }
             }
@@ -370,48 +370,4 @@ api.put('/ingredients/:id', async (req, res) => { try { const i = req.body; awai
 api.delete('/ingredients/:id', async (req, res) => { try { await pool.query('DELETE FROM ingredients WHERE id = ?', [req.params.id]); res.json({ success: true }); } catch (e) { res.status(500).json({ error: e.message }); } });
 
 // Users
-api.get('/users', async (req, res) => { try { const [rows] = await pool.query('SELECT * FROM users'); res.json(rows.map(r => parseRow(r, ['permissions']))); } catch (e) { res.status(500).json({ error: e.message }); } });
-api.post('/users', async (req, res) => { try { const u = req.body; await pool.query('INSERT INTO users (id, name, email, role, permissions, password) VALUES (?, ?, ?, ?, ?, ?)', [u.id, u.name, u.email, u.role, JSON.stringify(u.permissions||[]), u.password]); res.json({ success: true }); } catch (e) { res.status(500).json({ error: e.message }); } });
-api.delete('/users/:id', async (req, res) => { try { await pool.query('DELETE FROM users WHERE id = ?', [req.params.id]); res.json({ success: true }); } catch (e) { res.status(500).json({ error: e.message }); } });
-
-// Expenses
-api.get('/expenses', async (req, res) => { try { const [rows] = await pool.query('SELECT * FROM expenses'); res.json(rows.map(r => parseRow(r))); } catch (e) { res.status(500).json({ error: e.message }); } });
-api.post('/expenses', async (req, res) => { try { const e = req.body; await pool.query('INSERT INTO expenses (id, description, amount, category, date, reported_by, receipt_image) VALUES (?, ?, ?, ?, ?, ?, ?)', [e.id, e.description, e.amount, e.category, new Date(e.date).toISOString(), e.reportedBy, e.receiptImage || null]); res.json({ success: true }); } catch (e) { res.status(500).json({ error: e.message }); } });
-api.put('/expenses/:id', async (req, res) => { try { const e = req.body; await pool.query('UPDATE expenses SET description=?, amount=?, category=?, receipt_image=? WHERE id=?', [e.description, e.amount, e.category, e.receiptImage || null, req.params.id]); res.json({ success: true }); } catch (e) { res.status(500).json({ error: e.message }); } });
-api.delete('/expenses/:id', async (req, res) => { try { await pool.query('DELETE FROM expenses WHERE id = ?', [req.params.id]); res.json({ success: true }); } catch (e) { res.status(500).json({ error: e.message }); } });
-
-// Requisitions
-api.get('/requisitions', async (req, res) => { try { const [rows] = await pool.query('SELECT * FROM requisitions'); res.json(rows.map(r => parseRow(r))); } catch (e) { res.status(500).json({ error: e.message }); } });
-api.post('/requisitions', async (req, res) => { try { const r = req.body; await pool.query('INSERT INTO requisitions (id, ingredient_id, ingredient_name, quantity, unit, urgency, status, requested_by, requested_at, notes, estimated_unit_cost, preferred_supplier) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)', [r.id, r.ingredientId, r.ingredientName, r.quantity, r.unit, r.urgency, r.status, r.requestedBy, new Date(r.requestedAt).toISOString(), r.notes, r.estimatedUnitCost, r.preferredSupplier]); res.json({ success: true }); } catch (e) { res.status(500).json({ error: e.message }); } });
-api.put('/requisitions/:id', async (req, res) => { try { await pool.query('UPDATE requisitions SET status=? WHERE id=?', [req.body.status, req.params.id]); res.json({ success: true }); } catch (e) { res.status(500).json({ error: e.message }); } });
-
-// Customers
-api.get('/customers', async (req, res) => { try { const [rows] = await pool.query('SELECT * FROM customers'); res.json(rows.map(r => parseRow(r))); } catch (e) { res.status(500).json({ error: e.message }); } });
-api.post('/customers', async (req, res) => { try { const c = req.body; await pool.query('INSERT INTO customers (id, name, phone, email, loyalty_points, total_visits, last_visit, notes) VALUES (?, ?, ?, ?, ?, ?, ?, ?)', [c.id, c.name, c.phone, c.email, c.loyalty_points, c.totalVisits, new Date(c.lastVisit).toISOString(), c.notes]); res.json({ success: true }); } catch (e) { res.status(500).json({ error: e.message }); } });
-api.delete('/customers/:id', async (req, res) => { try { await pool.query('DELETE FROM customers WHERE id = ?', [req.params.id]); res.json({ success: true }); } catch (e) { res.status(500).json({ error: e.message }); } });
-
-// Mount API Router
-app.use('/api', api);
-
-// --- STATIC ASSETS ---
-const distPath = path.join(__dirname, 'dist');
-if (fs.existsSync(distPath)) {
-    app.use(express.static(distPath));
-    app.get('*', (req, res) => {
-        if (req.path.startsWith('/api') || req.path.startsWith('/_')) {
-            return res.status(404).json({ error: 'Endpoint not found' });
-        }
-        res.sendFile(path.join(distPath, 'index.html'));
-    });
-}
-
-// --- START SERVER ---
-const startServer = async () => {
-    app.listen(PORT, '0.0.0.0', () => {
-        console.log(`[Boot] Server running on http://0.0.0.0:${PORT}`);
-    });
-    // Initialize DB in background with retries
-    initDb(20, 3000); 
-};
-
-startServer();
+api.get('/users', async (req, res) => { try { const [rows] = await pool.query

@@ -273,7 +273,8 @@ const POS: React.FC<POSProps> = ({ orders, menuItems, onPlaceOrder, onUpdateOrde
   const getOrderTotal = (order: Order) => {
       const subtotal = order.items.reduce((acc, item) => {
           let price = item.priceAtOrder;
-          if ((!price || price === 0)) {
+          // Robust Fallback: If price is 0/undefined, try to find it in the menu
+          if (!price || price === 0) {
               const menuPrice = menuItems.find(m => m.id === item.menuItemId)?.price;
               if (menuPrice) price = menuPrice;
           }
@@ -283,6 +284,25 @@ const POS: React.FC<POSProps> = ({ orders, menuItems, onPlaceOrder, onUpdateOrde
       const taxable = Math.max(0, subtotal - (order.discount || 0));
       const taxAmount = taxable * ((order.taxRate || 0) / 100);
       return taxable + taxAmount;
+  };
+
+  // Helper to repair items with 0 price from menu
+  const repairItems = (items: LineItem[]): LineItem[] => {
+      return items.map(item => {
+          if ((!item.priceAtOrder || item.priceAtOrder === 0) && item.menuItemId) {
+              // Try to find price in menu
+              const menuItem = menuItems.find(m => m.id === item.menuItemId);
+              if (menuItem && menuItem.price > 0) {
+                  // Attempt to guess portion price if it's a portion
+                  let restoredPrice = menuItem.price;
+                  if (item.portion === 'Half' && menuItem.portionPrices?.half) restoredPrice = menuItem.portionPrices.half;
+                  if (item.portion === 'Quarter' && menuItem.portionPrices?.quarter) restoredPrice = menuItem.portionPrices.quarter;
+                  
+                  return { ...item, priceAtOrder: restoredPrice };
+              }
+          }
+          return item;
+      });
   };
 
   const constructOrderObject = (status: OrderStatus = OrderStatus.NEW, paymentStatus: PaymentStatus = PaymentStatus.PENDING, method?: PaymentMethod): Order => {
@@ -419,14 +439,16 @@ const POS: React.FC<POSProps> = ({ orders, menuItems, onPlaceOrder, onUpdateOrde
       if (action === 'add' && activeOrder) {
           setSelectedTable(occupiedTableId);
           setEditingOrder(activeOrder);
-          setCurrentCart([...activeOrder.items]);
+          // Auto-repair items with 0 price on load
+          setCurrentCart(repairItems([...activeOrder.items]));
           setManualTaxRate(activeOrder.taxRate?.toString() || '');
           setManualDiscount(activeOrder.discount?.toString() || '');
           setActiveView('new_order');
       } else if (action === 'settle' && activeOrder) {
           setSelectedTable(occupiedTableId);
           setEditingOrder(activeOrder);
-          setCurrentCart([...activeOrder.items]);
+          // Auto-repair items with 0 price on load
+          setCurrentCart(repairItems([...activeOrder.items]));
           setManualTaxRate(activeOrder.taxRate?.toString() || '');
           setManualDiscount(activeOrder.discount?.toString() || '');
           setShowPaymentOptions(true);
@@ -573,7 +595,7 @@ const POS: React.FC<POSProps> = ({ orders, menuItems, onPlaceOrder, onUpdateOrde
       const handleSettleHistory = (order: Order) => {
           setSelectedTable(order.tableNumber);
           setEditingOrder(order);
-          setCurrentCart([...order.items]);
+          setCurrentCart(repairItems([...order.items])); // Auto-repair items here too
           setManualTaxRate(order.taxRate?.toString() || '');
           setManualDiscount(order.discount?.toString() || '');
           setShowPaymentOptions(true); 
