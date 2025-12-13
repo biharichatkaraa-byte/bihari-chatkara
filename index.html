@@ -6,12 +6,12 @@
     <meta name="theme-color" content="#1e293b" />
     <meta name="description" content="Restaurant Management System for Bihari Chatkara" />
     <title>Bihari Chatkara</title>
-    <link rel="manifest" href="/manifest.json" />
+    <link rel="manifest" href="manifest.json" />
     <link rel="apple-touch-icon" href="https://cdn-icons-png.flaticon.com/512/3448/3448609.png">
     <script src="https://unpkg.com/html5-qrcode" type="text/javascript"></script>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Playfair+Display:wght@400;700;900&display=swap" rel="stylesheet">
     
-    <!-- Tailwind CSS CDN for immediate styling -->
+    <!-- Tailwind CSS CDN for immediate styling (Fallback/Dev) -->
     <script src="https://cdn.tailwindcss.com"></script>
     <script>
       tailwind.config = {
@@ -27,6 +27,11 @@
     </script>
 
     <style>
+      html, body, #root {
+        height: 100%;
+        margin: 0;
+        padding: 0;
+      }
       body {
         font-family: 'Inter', sans-serif;
         background-color: #f3f4f6;
