@@ -54,7 +54,80 @@ const SEED_INGREDIENTS = [
   { id: 'i-onion', name: 'Onion (Red)', category: 'Produce', unit: 'kg', unitCost: 30.00, stockQuantity: 50 },
   { id: 'i-tomato', name: 'Tomato (Hybrid)', category: 'Produce', unit: 'kg', unitCost: 40.00, stockQuantity: 40 },
   { id: 'i-potato', name: 'Potato', category: 'Produce', unit: 'kg', unitCost: 25.00, stockQuantity: 100 },
-  // ... (keeping other ingredients implicitly for brevity in this update, assuming they are unchanged)
+  { id: 'i-garlic', name: 'Garlic', category: 'Produce', unit: 'kg', unitCost: 120.00, stockQuantity: 10 },
+  { id: 'i-ginger', name: 'Ginger', category: 'Produce', unit: 'kg', unitCost: 80.00, stockQuantity: 8 },
+  { id: 'i-coriander', name: 'Coriander Leaves', category: 'Produce', unit: 'kg', unitCost: 60.00, stockQuantity: 5 },
+  { id: 'i-lemon', name: 'Lemon', category: 'Produce', unit: 'pc', unitCost: 5.00, stockQuantity: 100 },
+  { id: 'i-grn-chilli', name: 'Green Chilli', category: 'Produce', unit: 'kg', unitCost: 60.00, stockQuantity: 5 },
+  { id: 'i-capsicum', name: 'Capsicum (Green)', category: 'Produce', unit: 'kg', unitCost: 50.00, stockQuantity: 15 },
+  { id: 'i-cucumber', name: 'Cucumber', category: 'Produce', unit: 'kg', unitCost: 30.00, stockQuantity: 20 },
+  { id: 'i-mint', name: 'Mint Leaves', category: 'Produce', unit: 'kg', unitCost: 40.00, stockQuantity: 2 },
+  { id: 'i-spinach', name: 'Spinach (Palak)', category: 'Produce', unit: 'kg', unitCost: 30.00, stockQuantity: 10 },
+  { id: 'i-carrot', name: 'Carrot', category: 'Produce', unit: 'kg', unitCost: 40.00, stockQuantity: 15 },
+  { id: 'i-cabbage', name: 'Cabbage', category: 'Produce', unit: 'kg', unitCost: 20.00, stockQuantity: 20 },
+  { id: 'i-cauliflower', name: 'Cauliflower', category: 'Produce', unit: 'kg', unitCost: 35.00, stockQuantity: 15 },
+
+  // DAIRY
+  { id: 'i-milk', name: 'Milk (Full Cream)', category: 'Dairy', unit: 'l', unitCost: 66.00, stockQuantity: 50 },
+  { id: 'i-paneer', name: 'Paneer (Cottage Cheese)', category: 'Dairy', unit: 'kg', unitCost: 380.00, stockQuantity: 20 },
+  { id: 'i-butter', name: 'Butter (Salted)', category: 'Dairy', unit: 'kg', unitCost: 520.00, stockQuantity: 10 },
+  { id: 'i-cream', name: 'Fresh Cream', category: 'Dairy', unit: 'l', unitCost: 220.00, stockQuantity: 10 },
+  { id: 'i-curd', name: 'Curd/Yogurt', category: 'Dairy', unit: 'kg', unitCost: 70.00, stockQuantity: 25 },
+  { id: 'i-cheese-moz', name: 'Mozzarella Cheese', category: 'Dairy', unit: 'kg', unitCost: 450.00, stockQuantity: 15 },
+  { id: 'i-cheese-sl', name: 'Cheese Slices', category: 'Dairy', unit: 'pkt', unitCost: 140.00, stockQuantity: 20 },
+  { id: 'i-ghee', name: 'Desi Ghee', category: 'Dairy', unit: 'l', unitCost: 650.00, stockQuantity: 10 },
+
+  // PROTEINS
+  { id: 'i-chk-breast', name: 'Chicken Breast (Boneless)', category: 'Meat', unit: 'kg', unitCost: 280.00, stockQuantity: 30 },
+  { id: 'i-chk-bone', name: 'Chicken Curry Cut', category: 'Meat', unit: 'kg', unitCost: 220.00, stockQuantity: 40 },
+  { id: 'i-mutton', name: 'Mutton (Goat)', category: 'Meat', unit: 'kg', unitCost: 750.00, stockQuantity: 10 },
+  { id: 'i-fish-basa', name: 'Fish Fillet (Basa)', category: 'Meat', unit: 'kg', unitCost: 350.00, stockQuantity: 15 },
+  { id: 'i-eggs', name: 'Eggs', category: 'Meat', unit: 'tray', unitCost: 180.00, stockQuantity: 20 },
+
+  // PANTRY
+  { id: 'i-rice-bas', name: 'Rice (Basmati)', category: 'Pantry', unit: 'kg', unitCost: 90.00, stockQuantity: 100 },
+  { id: 'i-rice-sona', name: 'Rice (Sona Masoori)', category: 'Pantry', unit: 'kg', unitCost: 55.00, stockQuantity: 100 },
+  { id: 'i-atta', name: 'Wheat Flour (Atta)', category: 'Pantry', unit: 'kg', unitCost: 40.00, stockQuantity: 100 },
+  { id: 'i-maida', name: 'Refined Flour (Maida)', category: 'Pantry', unit: 'kg', unitCost: 35.00, stockQuantity: 50 },
+  { id: 'i-besan', name: 'Gram Flour (Besan)', category: 'Pantry', unit: 'kg', unitCost: 80.00, stockQuantity: 20 },
+  { id: 'i-cornflour', name: 'Corn Flour', category: 'Pantry', unit: 'kg', unitCost: 60.00, stockQuantity: 10 },
+  { id: 'i-sugar', name: 'Sugar', category: 'Pantry', unit: 'kg', unitCost: 42.00, stockQuantity: 50 },
+  { id: 'i-salt', name: 'Salt', category: 'Pantry', unit: 'kg', unitCost: 20.00, stockQuantity: 50 },
+  { id: 'i-oil-must', name: 'Mustard Oil', category: 'Pantry', unit: 'l', unitCost: 160.00, stockQuantity: 50 },
+  { id: 'i-oil-ref', name: 'Refined Oil', category: 'Pantry', unit: 'l', unitCost: 130.00, stockQuantity: 100 },
+  { id: 'i-dal-toor', name: 'Toor Dal', category: 'Pantry', unit: 'kg', unitCost: 140.00, stockQuantity: 30 },
+  { id: 'i-dal-moong', name: 'Moong Dal (Yellow)', category: 'Pantry', unit: 'kg', unitCost: 110.00, stockQuantity: 20 },
+  { id: 'i-dal-urad', name: 'Urad Dal (Whole)', category: 'Pantry', unit: 'kg', unitCost: 130.00, stockQuantity: 20 },
+  { id: 'i-chana', name: 'Kabuli Chana', category: 'Pantry', unit: 'kg', unitCost: 100.00, stockQuantity: 20 },
+  { id: 'i-rajma', name: 'Rajma (Kidney Beans)', category: 'Pantry', unit: 'kg', unitCost: 120.00, stockQuantity: 20 },
+
+  // SPICES
+  { id: 'i-jeera', name: 'Cumin Seeds (Jeera)', category: 'Spices', unit: 'kg', unitCost: 400.00, stockQuantity: 5 },
+  { id: 'i-mustard-sd', name: 'Mustard Seeds (Rai)', category: 'Spices', unit: 'kg', unitCost: 150.00, stockQuantity: 5 },
+  { id: 'i-haldi', name: 'Turmeric Powder', category: 'Spices', unit: 'kg', unitCost: 200.00, stockQuantity: 10 },
+  { id: 'i-red-chilli', name: 'Red Chilli Powder', category: 'Spices', unit: 'kg', unitCost: 300.00, stockQuantity: 10 },
+  { id: 'i-dhaniya-pw', name: 'Coriander Powder', category: 'Spices', unit: 'kg', unitCost: 200.00, stockQuantity: 10 },
+  { id: 'i-garam-masala', name: 'Garam Masala', category: 'Spices', unit: 'kg', unitCost: 600.00, stockQuantity: 5 },
+  { id: 'i-cardamom', name: 'Cardamom (Green)', category: 'Spices', unit: 'kg', unitCost: 2500.00, stockQuantity: 1 },
+  { id: 'i-cloves', name: 'Cloves (Laung)', category: 'Spices', unit: 'kg', unitCost: 1200.00, stockQuantity: 1 },
+  { id: 'i-cinnamon', name: 'Cinnamon Sticks', category: 'Spices', unit: 'kg', unitCost: 800.00, stockQuantity: 1 },
+  { id: 'i-bay-leaf', name: 'Bay Leaf (Tej Patta)', category: 'Spices', unit: 'kg', unitCost: 300.00, stockQuantity: 2 },
+  { id: 'i-blk-pepper', name: 'Black Pepper (Whole)', category: 'Spices', unit: 'kg', unitCost: 600.00, stockQuantity: 2 },
+  { id: 'i-chaat-masala', name: 'Chaat Masala', category: 'Spices', unit: 'kg', unitCost: 350.00, stockQuantity: 5 },
+  { id: 'i-kasuri', name: 'Kasuri Methi', category: 'Spices', unit: 'kg', unitCost: 400.00, stockQuantity: 2 },
+
+  // SAUCES
+  { id: 'i-soy', name: 'Dark Soy Sauce', category: 'Condiments', unit: 'l', unitCost: 80.00, stockQuantity: 10 },
+  { id: 'i-vinegar', name: 'White Vinegar', category: 'Condiments', unit: 'l', unitCost: 40.00, stockQuantity: 10 },
+  { id: 'i-chilli-sauce', name: 'Green Chilli Sauce', category: 'Condiments', unit: 'l', unitCost: 60.00, stockQuantity: 10 },
+  { id: 'i-ketchup', name: 'Tomato Ketchup', category: 'Condiments', unit: 'kg', unitCost: 120.00, stockQuantity: 15 },
+  { id: 'i-mayo', name: 'Mayonnaise', category: 'Condiments', unit: 'kg', unitCost: 150.00, stockQuantity: 10 },
+  
+  // BEVERAGES
+  { id: 'i-tea', name: 'Tea Leaves', category: 'Beverages', unit: 'kg', unitCost: 450.00, stockQuantity: 10 },
+  { id: 'i-coffee', name: 'Coffee Powder', category: 'Beverages', unit: 'kg', unitCost: 800.00, stockQuantity: 5 },
+  { id: 'i-water', name: 'Mineral Water (1L)', category: 'Beverages', unit: 'crate', unitCost: 120.00, stockQuantity: 50 },
+  { id: 'i-soda', name: 'Soda (600ml)', category: 'Beverages', unit: 'crate', unitCost: 400.00, stockQuantity: 20 },
 ];
 
 // --- APP INITIALIZATION ---
@@ -113,12 +186,15 @@ const initDb = async (retries = 10, delay = 5000) => {
             const [userRows] = await connection.query('SELECT count(*) as count FROM users');
             if (Number(userRows[0].count) === 0) {
                 console.log("[DB] Seeding Default Admin User...");
-                await connection.query('INSERT INTO users (id, name, email, role, permissions, password) VALUES (?, ?, ?, ?, ?, ?)', ['u1', 'Administrator', 'admin@biharichatkara.com', 'Manager', '[]', 'admin123']);
+                const adminEmail = process.env.ADMIN_EMAIL || 'admin@biharichatkara.com';
+                const adminPass = process.env.ADMIN_PASSWORD || 'admin123';
+                await connection.query('INSERT INTO users (id, name, email, role, permissions, password) VALUES (?, ?, ?, ?, ?, ?)', ['u1', 'Administrator', adminEmail, 'Manager', '[]', adminPass]);
             }
             // Optional: Seed ingredients if empty
             const [ingRows] = await connection.query('SELECT count(*) as count FROM ingredients');
             if (Number(ingRows[0].count) === 0 && SEED_INGREDIENTS.length > 0) {
-                 // seeding logic here if needed, keeping mostly commented to avoid huge file
+                 console.log("[DB] Seeding Comprehensive Inventory...");
+                 for (const i of SEED_INGREDIENTS) await connection.query('INSERT INTO ingredients (id, name, category, unit, unit_cost, stock_quantity) VALUES (?, ?, ?, ?, ?, ?)', [i.id, i.name, i.category, i.unit, i.unitCost, i.stockQuantity]);
             }
             
             connection.release();
@@ -281,7 +357,6 @@ api.put('/orders/:id/status', async (req, res) => {
     try { await pool.query('UPDATE orders SET status = ? WHERE id = ?', [req.body.status, req.params.id]); res.json({ success: true }); } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
-// ... (Other endpoints kept concise for brevity, assumes standard CRUD)
 // Menu
 api.get('/menu-items', async (req, res) => { try { const [rows] = await pool.query('SELECT * FROM menu_items'); res.json(rows.map(r => parseRow(r, ['ingredients', 'portionPrices', 'tags']))); } catch (e) { res.status(500).json({ error: e.message }); } });
 api.post('/menu-items', async (req, res) => { try { const i = req.body; await pool.query('INSERT INTO menu_items (id, category_id, sub_category_id, name, category, price, description, is_veg, available, ingredients, portion_prices, tags) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)', [i.id, i.categoryId, i.subCategoryId, i.name, i.category, i.price, i.description, i.isVeg?1:0, i.available?1:0, JSON.stringify(i.ingredients), JSON.stringify(i.portionPrices), JSON.stringify(i.tags)]); res.json({ success: true }); } catch (e) { res.status(500).json({ error: e.message }); } });
