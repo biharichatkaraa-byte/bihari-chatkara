@@ -46,22 +46,13 @@ npm install
 
 ### 2. Configuration
 
-Create a `.env` file in the root directory. You can use the example below:
+Create a `.env` file in the root directory by copying the example:
 
-```env
-# --- BACKEND CONFIGURATION (Only for Full Stack Mode) ---
-PORT=8080
-
-# Database Credentials
-DB_HOST=127.0.0.1
-DB_PORT=3306
-DB_USER=root
-DB_PASSWORD=your_password
-DB_NAME=chatkara
-
-# Google Cloud SQL (Optional - Production)
-# INSTANCE_CONNECTION_NAME=project:region:instance
+```bash
+cp .env.example .env
 ```
+
+Edit `.env` and add your database credentials.
 
 ### 3. Running the Application
 

@@ -1,15 +1,18 @@
 
 # Dependencies
 node_modules/
-pnpm-lock.yaml
-yarn.lock
-package-lock.json
+.pnp
+.pnp.js
+
+# Testing
+coverage/
 
 # Production
 dist/
 build/
 
-# Environment Variables
+# Misc
+.DS_Store
 .env
 .env.local
 .env.development.local
@@ -17,29 +20,11 @@ build/
 .env.production.local
 
 # Logs
-logs
-*.log
 npm-debug.log*
 yarn-debug.log*
 yarn-error.log*
-pnpm-debug.log*
-
-# Editor directories and files
-.vscode/*
-!.vscode/extensions.json
-.idea
-.DS_Store
-*.suo
-*.ntvs
-*.njsproj
-*.sln
-*.sw?
-
-# Testing
-coverage/
-.nyc_output/
-
-# Runtime data
+logs
+*.log
 pids
 *.pid
 *.seed
@@ -48,3 +33,12 @@ pids
 # Optional: SQLite or local DB files if used
 *.sqlite
 *.db
+
+# Editor directories and files
+.idea
+.vscode
+*.suo
+*.ntvs
+*.njsproj
+*.sln
+*.sw?
