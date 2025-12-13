@@ -1,4 +1,3 @@
-
 import 'dotenv/config';
 import express from 'express';
 import cors from 'cors';
@@ -143,11 +142,11 @@ let isDbInitialized = false;
 const initDb = async (retries = 10, delay = 5000) => {
     for (let i = 0; i < retries; i++) {
         try {
-            console.log(`[DB] Attempting connection (Attempt ${i + 1}/${retries})...`);
+            console.debug(`[DB] Attempting connection (Attempt ${i + 1}/${retries})...`);
             
             // Test connection
             const connection = await pool.getConnection();
-            console.log(`[DB] MySQL Connected Successfully to '${DB_CONFIG.database}'.`);
+            console.debug(`[DB] MySQL Connected Successfully to '${DB_CONFIG.database}'.`);
             
             // Initialize Schema
             await connection.query(`CREATE TABLE IF NOT EXISTS users (id VARCHAR(50) PRIMARY KEY, name VARCHAR(100), email VARCHAR(100), role VARCHAR(50), permissions TEXT, password VARCHAR(100))`);
@@ -370,4 +369,35 @@ api.put('/ingredients/:id', async (req, res) => { try { const i = req.body; awai
 api.delete('/ingredients/:id', async (req, res) => { try { await pool.query('DELETE FROM ingredients WHERE id = ?', [req.params.id]); res.json({ success: true }); } catch (e) { res.status(500).json({ error: e.message }); } });
 
 // Users
-api.get('/users', async (req, res) => { try { const [rows] = await pool.query
+api.get('/users', async (req, res) => { try { const [rows] = await pool.query('SELECT * FROM users'); res.json(rows.map(r => parseRow(r, ['permissions']))); } catch (e) { res.status(500).json({ error: e.message }); } });
+api.post('/users', async (req, res) => { try { const u = req.body; await pool.query('INSERT INTO users (id, name, email, role, permissions, password) VALUES (?, ?, ?, ?, ?, ?)', [u.id, u.name, u.email, u.role, JSON.stringify(u.permissions || []), u.password]); res.json({ success: true }); } catch (e) { res.status(500).json({ error: e.message }); } });
+api.delete('/users/:id', async (req, res) => { try { await pool.query('DELETE FROM users WHERE id = ?', [req.params.id]); res.json({ success: true }); } catch (e) { res.status(500).json({ error: e.message }); } });
+
+// Expenses
+api.get('/expenses', async (req, res) => { try { const [rows] = await pool.query('SELECT * FROM expenses ORDER BY date DESC'); res.json(rows.map(r => parseRow(r))); } catch (e) { res.status(500).json({ error: e.message }); } });
+api.post('/expenses', async (req, res) => { try { const e = req.body; await pool.query('INSERT INTO expenses (id, description, amount, category, date, reported_by, receipt_image) VALUES (?, ?, ?, ?, ?, ?, ?)', [e.id, e.description, e.amount, e.category, new Date(e.date).toISOString(), e.reportedBy, e.receiptImage]); res.json({ success: true }); } catch (e) { res.status(500).json({ error: e.message }); } });
+api.put('/expenses/:id', async (req, res) => { try { const e = req.body; await pool.query('UPDATE expenses SET description=?, amount=?, category=?, date=?, receipt_image=? WHERE id=?', [e.description, e.amount, e.category, new Date(e.date).toISOString(), e.receiptImage, req.params.id]); res.json({ success: true }); } catch (e) { res.status(500).json({ error: e.message }); } });
+api.delete('/expenses/:id', async (req, res) => { try { await pool.query('DELETE FROM expenses WHERE id = ?', [req.params.id]); res.json({ success: true }); } catch (e) { res.status(500).json({ error: e.message }); } });
+
+// Requisitions
+api.get('/requisitions', async (req, res) => { try { const [rows] = await pool.query('SELECT * FROM requisitions ORDER BY requested_at DESC'); res.json(rows.map(r => parseRow(r))); } catch (e) { res.status(500).json({ error: e.message }); } });
+api.post('/requisitions', async (req, res) => { try { const r = req.body; await pool.query('INSERT INTO requisitions (id, ingredient_id, ingredient_name, quantity, unit, urgency, status, requested_by, requested_at, notes, estimated_unit_cost, preferred_supplier) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)', [r.id, r.ingredientId, r.ingredientName, r.quantity, r.unit, r.urgency, r.status, r.requestedBy, new Date(r.requestedAt).toISOString(), r.notes, r.estimatedUnitCost, r.preferredSupplier]); res.json({ success: true }); } catch (e) { res.status(500).json({ error: e.message }); } });
+api.put('/requisitions/:id', async (req, res) => { try { const r = req.body; await pool.query('UPDATE requisitions SET status=? WHERE id=?', [r.status, req.params.id]); res.json({ success: true }); } catch (e) { res.status(500).json({ error: e.message }); } });
+
+// Customers
+api.get('/customers', async (req, res) => { try { const [rows] = await pool.query('SELECT * FROM customers'); res.json(rows.map(r => parseRow(r))); } catch (e) { res.status(500).json({ error: e.message }); } });
+api.post('/customers', async (req, res) => { try { const c = req.body; await pool.query('INSERT INTO customers (id, name, phone, email, loyalty_points, total_visits, last_visit, notes) VALUES (?, ?, ?, ?, ?, ?, ?, ?)', [c.id, c.name, c.phone, c.email, c.loyaltyPoints, c.totalVisits, new Date(c.lastVisit).toISOString(), c.notes]); res.json({ success: true }); } catch (e) { res.status(500).json({ error: e.message }); } });
+api.delete('/customers/:id', async (req, res) => { try { await pool.query('DELETE FROM customers WHERE id = ?', [req.params.id]); res.json({ success: true }); } catch (e) { res.status(500).json({ error: e.message }); } });
+
+// --- SERVER START ---
+app.use('/api', api);
+
+// Serve static assets in production
+if (process.env.NODE_ENV === 'production') {
+    app.use(express.static(path.join(__dirname, 'dist')));
+    app.get('*', (req, res) => res.sendFile(path.resolve(__dirname, 'dist', 'index.html')));
+}
+
+initDb().then(() => {
+    app.listen(PORT, () => console.log(`[Server] Running on http://localhost:${PORT}`));
+});
