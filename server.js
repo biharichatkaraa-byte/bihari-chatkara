@@ -313,20 +313,45 @@ api.post('/login', async (req, res) => {
     }
 });
 
-// Orders
+// Orders (Optimized N+1 fix)
 api.get('/orders', async (req, res) => {
     try {
+        // 1. Fetch Orders
         const [orders] = await pool.query('SELECT * FROM orders ORDER BY created_at DESC LIMIT 200');
-        const result = [];
-        for (const o of orders) {
-            const orderObj = parseRow(o);
-            const [items] = await pool.query('SELECT * FROM order_items WHERE order_id = ?', [o.id]);
-            orderObj.items = items.map(i => parseRow(i, ['modifiers']));
-            result.push(orderObj);
+        const result = orders.map(o => parseRow(o));
+        
+        if (result.length === 0) {
+            return res.json([]);
         }
+
+        // 2. Fetch all related Items in one go
+        const orderIds = result.map(o => o.id);
+        // Create placeholders for IN clause (?,?,?)
+        const placeholders = orderIds.map(() => '?').join(',');
+        const [allItems] = await pool.query(`SELECT * FROM order_items WHERE order_id IN (${placeholders})`, orderIds);
+        
+        // 3. Map items to orders
+        const itemsMap = {};
+        allItems.forEach(item => {
+            const parsedItem = parseRow(item, ['modifiers']);
+            if (!itemsMap[parsedItem.orderId]) {
+                itemsMap[parsedItem.orderId] = [];
+            }
+            itemsMap[parsedItem.orderId].push(parsedItem);
+        });
+
+        // 4. Attach items to result
+        result.forEach(order => {
+            order.items = itemsMap[order.id] || [];
+        });
+
         res.json(result);
-    } catch (e) { res.status(500).json({ error: e.message }); }
+    } catch (e) { 
+        console.error("Order Fetch Error:", e);
+        res.status(500).json({ error: e.message }); 
+    }
 });
+
 api.post('/orders', async (req, res) => {
     const o = req.body;
     const connection = await pool.getConnection();

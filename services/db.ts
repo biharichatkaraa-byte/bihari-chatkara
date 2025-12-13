@@ -289,8 +289,8 @@ export const subscribeToCollection = (
 
     fetchData(); // Initial Fetch
     
-    // 1. High Frequency Polling (1s)
-    const intervalId = setInterval(fetchData, 1000); 
+    // 1. Lower Frequency Polling (5s) to reduce database load
+    const intervalId = setInterval(fetchData, 5000); 
 
     // 2. Fetch on Window Focus (Instant update when switching back to tab)
     const handleFocus = () => {

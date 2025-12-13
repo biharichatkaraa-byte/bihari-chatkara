@@ -46,11 +46,12 @@ A comprehensive, cloud-ready Restaurant Management System built with React, Vite
     npm install
     ```
 
-3.  (Optional) Set up Environment Variables:
-    Copy `.env.example` to `.env` and fill in your database credentials if running the backend.
+3.  Set up Environment Variables:
+    Copy `.env.example` to `.env`.
     ```bash
     cp .env.example .env
     ```
+    If you are running the backend, update `.env` with your MySQL credentials. If you just want to run the frontend in **Demo Mode**, you can skip this step or leave the defaults.
 
 ### Running Locally (Development)
 
