@@ -13,6 +13,31 @@
     <script src="https://unpkg.com/html5-qrcode" type="text/javascript"></script>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Playfair+Display:wght@400;700;900&display=swap" rel="stylesheet">
     
+    <!-- Tailwind CSS CDN Fallback -->
+    <!-- This ensures the UI looks correct immediately, even if the local build process fails to generate CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script>
+      tailwind.config = {
+        theme: {
+          extend: {
+            fontFamily: {
+              sans: ['Inter', 'sans-serif'],
+              serif: ['Playfair Display', 'serif'],
+            },
+            animation: {
+              'flash-red': 'flash-red 1s 5',
+            },
+            keyframes: {
+              'flash-red': {
+                '0%, 100%': { backgroundColor: '#fef2f2', borderColor: '#ef4444', boxShadow: '0 0 0 0 rgba(239, 68, 68, 0)' },
+                '50%': { backgroundColor: '#fee2e2', borderColor: '#b91c1c', boxShadow: '0 0 0 4px rgba(239, 68, 68, 0.2)' },
+              }
+            }
+          },
+        },
+      }
+    </script>
+
     <style>
       html, body, #root {
         height: 100%;
@@ -39,14 +64,6 @@
       
       .pb-safe-area {
         padding-bottom: env(safe-area-inset-bottom);
-      }
-
-      @keyframes flash-red {
-        0%, 100% { background-color: #fef2f2; border-color: #ef4444; box-shadow: 0 0 0 0 rgba(239, 68, 68, 0); }
-        50% { background-color: #fee2e2; border-color: #b91c1c; box-shadow: 0 0 0 4px rgba(239, 68, 68, 0.2); }
-      }
-      .animate-flash-red {
-        animation: flash-red 1s 5;
       }
 
       /* Production Print Styles for Thermal Receipts */
