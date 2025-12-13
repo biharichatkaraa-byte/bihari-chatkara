@@ -260,11 +260,11 @@ const POS: React.FC<POSProps> = ({ orders, menuItems, onPlaceOrder, onUpdateOrde
   };
 
   const calculateSubtotal = () => {
-    return currentCart.reduce((acc, item) => acc + (item.priceAtOrder * item.quantity), 0);
+    return currentCart.reduce((acc, item) => acc + ((Number(item.priceAtOrder) || 0) * item.quantity), 0);
   };
 
   const calculateFinalTotal = (items: LineItem[], taxRate: number = 0, discount: number = 0) => {
-      const subtotal = items.reduce((acc, item) => acc + (item.priceAtOrder * item.quantity), 0);
+      const subtotal = items.reduce((acc, item) => acc + ((Number(item.priceAtOrder) || 0) * item.quantity), 0);
       const taxable = Math.max(0, subtotal - discount);
       const taxAmount = taxable * (taxRate / 100);
       return taxable + taxAmount;
@@ -272,9 +272,9 @@ const POS: React.FC<POSProps> = ({ orders, menuItems, onPlaceOrder, onUpdateOrde
 
   const getOrderTotal = (order: Order) => {
       const subtotal = order.items.reduce((acc, item) => {
-          let price = item.priceAtOrder;
-          // Robust Fallback: If price is 0/undefined, try to find it in the menu
-          if (!price || price === 0) {
+          let price = Number(item.priceAtOrder) || 0;
+          // Robust Fallback: If price is 0, try to find it in the menu
+          if (price === 0) {
               const menuPrice = menuItems.find(m => m.id === item.menuItemId)?.price;
               if (menuPrice) price = menuPrice;
           }
@@ -287,9 +287,13 @@ const POS: React.FC<POSProps> = ({ orders, menuItems, onPlaceOrder, onUpdateOrde
   };
 
   // Helper to repair items with 0 price from menu
+  // UPDATED: Now preserves custom items' prices if they exist, and handles 0 values gracefully.
   const repairItems = (items: LineItem[]): LineItem[] => {
       return items.map(item => {
-          if ((!item.priceAtOrder || item.priceAtOrder === 0) && item.menuItemId) {
+          const currentPrice = Number(item.priceAtOrder) || 0;
+          
+          // Only attempt repair if price is 0 AND it's a known menu item (not custom)
+          if (currentPrice === 0 && item.menuItemId && !item.menuItemId.startsWith('custom-')) {
               // Try to find price in menu
               const menuItem = menuItems.find(m => m.id === item.menuItemId);
               if (menuItem && menuItem.price > 0) {
@@ -821,9 +825,9 @@ const POS: React.FC<POSProps> = ({ orders, menuItems, onPlaceOrder, onUpdateOrde
                   <div className="flex justify-between items-start">
                     <div className="flex-1 pr-2">
                         <p className="font-bold text-slate-800 text-sm leading-tight">{displayName} {item.portion && item.portion !== 'Full' && <span className="text-xs font-bold text-blue-600 ml-1">({item.portion})</span>}</p>
-                        <p className="text-xs text-slate-400 mt-0.5">₹{item.priceAtOrder.toFixed(2)} / unit</p>
+                        <p className="text-xs text-slate-400 mt-0.5">₹{Number(item.priceAtOrder || 0).toFixed(2)} / unit</p>
                     </div>
-                    <div className="text-right"><p className="font-bold text-slate-900">₹{(item.priceAtOrder * item.quantity).toFixed(0)}</p></div>
+                    <div className="text-right"><p className="font-bold text-slate-900">₹{(Number(item.priceAtOrder || 0) * item.quantity).toFixed(0)}</p></div>
                   </div>
                   {item.modifiers && item.modifiers.length > 0 && (
                       <div className="mt-2 text-xs font-medium text-orange-600 bg-orange-50 px-2 py-1 rounded border border-orange-100 flex items-start gap-1"><MessageSquare size={12} className="mt-0.5 flex-shrink-0" /><span>{item.modifiers[0]}</span></div>
@@ -979,8 +983,8 @@ const POS: React.FC<POSProps> = ({ orders, menuItems, onPlaceOrder, onUpdateOrde
                            const portionLabel = item.portion && item.portion !== 'Full' ? ` (${item.portion[0]})` : '';
                            
                            // Fallback Price Logic for Receipt
-                           let price = item.priceAtOrder;
-                           if ((!price || price === 0) && menuItems) {
+                           let price = Number(item.priceAtOrder) || 0;
+                           if (price === 0 && menuItems) {
                                const menuItem = menuItems.find(m => m.id === item.menuItemId);
                                if (menuItem) price = menuItem.price;
                            }
@@ -997,8 +1001,8 @@ const POS: React.FC<POSProps> = ({ orders, menuItems, onPlaceOrder, onUpdateOrde
 
                   <div className="border-t-2 border-dashed border-black pt-2 space-y-1 text-xs">
                       <div className="flex justify-between"><span>Subtotal</span><span>{printOrder.items.reduce((acc, i) => {
-                          let price = i.priceAtOrder;
-                          if ((!price || price === 0) && menuItems) {
+                          let price = Number(i.priceAtOrder) || 0;
+                          if (price === 0 && menuItems) {
                               const menuItem = menuItems.find(m => m.id === i.menuItemId);
                               if (menuItem) price = menuItem.price;
                           }
@@ -1006,8 +1010,8 @@ const POS: React.FC<POSProps> = ({ orders, menuItems, onPlaceOrder, onUpdateOrde
                       }, 0).toFixed(2)}</span></div>
                       {printOrder.discount && printOrder.discount > 0 && <div className="flex justify-between"><span>Discount</span><span>-{printOrder.discount.toFixed(2)}</span></div>}
                       <div className="flex justify-between"><span>Tax ({printOrder.taxRate}%)</span><span>{((getOrderTotal(printOrder) - (printOrder.items.reduce((a,i)=>{
-                          let price = i.priceAtOrder;
-                          if ((!price || price === 0) && menuItems) {
+                          let price = Number(i.priceAtOrder) || 0;
+                          if (price === 0 && menuItems) {
                               const menuItem = menuItems.find(m => m.id === i.menuItemId);
                               if (menuItem) price = menuItem.price;
                           }

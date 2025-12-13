@@ -323,7 +323,7 @@ api.post('/orders', async (req, res) => {
         await connection.beginTransaction();
         await connection.query('INSERT INTO orders (id, table_number, server_name, status, payment_status, payment_method, created_at, tax_rate, discount) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)', [o.id, o.tableNumber, o.serverName, o.status, o.paymentStatus, o.paymentMethod, new Date(o.createdAt).toISOString(), o.taxRate, o.discount]);
         if (o.items?.length > 0) {
-            for (const i of o.items) await connection.query('INSERT INTO order_items (id, order_id, menu_item_id, name, quantity, price_at_order, portion, modifiers) VALUES (?, ?, ?, ?, ?, ?, ?, ?)', [i.id, o.id, i.menuItemId, i.name, i.quantity, (i.priceAtOrder !== undefined ? i.priceAtOrder : 0), i.portion, JSON.stringify(i.modifiers || [])]);
+            for (const i of o.items) await connection.query('INSERT INTO order_items (id, order_id, menu_item_id, name, quantity, price_at_order, portion, modifiers) VALUES (?, ?, ?, ?, ?, ?, ?, ?)', [i.id, o.id, i.menuItemId, i.name, i.quantity, Number(i.priceAtOrder || 0), i.portion, JSON.stringify(i.modifiers || [])]);
         }
         await connection.commit();
         res.json({ success: true });
@@ -342,7 +342,7 @@ api.put('/orders/:id', async (req, res) => {
             if (o.items.length > 0) {
                 for (const i of o.items) {
                     await connection.query('INSERT INTO order_items (id, order_id, menu_item_id, name, quantity, price_at_order, portion, modifiers) VALUES (?, ?, ?, ?, ?, ?, ?, ?)', 
-                        [i.id, req.params.id, i.menuItemId, i.name, i.quantity, (i.priceAtOrder !== undefined ? i.priceAtOrder : 0), i.portion, JSON.stringify(i.modifiers || [])]
+                        [i.id, req.params.id, i.menuItemId, i.name, i.quantity, Number(i.priceAtOrder || 0), i.portion, JSON.stringify(i.modifiers || [])]
                     );
                 }
             }
