@@ -1,106 +1,127 @@
 
-# Bihari Chatkara - Restaurant Management System (RMS)
+# 🥘 Bihari Chatkara - Restaurant Management System (RMS)
 
-A comprehensive, cloud-ready Restaurant Management System built with React, Vite, Express, and MySQL. This application handles Point of Sale (POS), Kitchen Display Systems (KDS), Inventory Management, Staff Roles, and Procurement.
+A modern, comprehensive, and cloud-ready Restaurant Management System built to streamline operations from the table to the back office.
 
 ![License](https://img.shields.io/badge/license-MIT-blue.svg)
 ![React](https://img.shields.io/badge/React-18-blue)
 ![Vite](https://img.shields.io/badge/Vite-5-purple)
 ![Tailwind](https://img.shields.io/badge/Tailwind-3-cyan)
+![Node](https://img.shields.io/badge/Node.js-18+-green)
 
-## Features
+## 🚀 Features
 
-*   **Point of Sale (POS)**: Table management, quick ordering, custom items, and bill printing.
-*   **Kitchen Display System (KDS)**: Real-time order ticking, color-coded urgency, and "Chef AI" recipe assistance.
-*   **Advanced Order History**: Detailed transaction logs with filtering by Date, Time, Payment Method (Cash/Card/UPI), and Status.
-*   **Inventory**: Ingredient tracking, menu cost analysis, and low-stock alerts.
-*   **Procurement**: Purchase requisition workflow (Chef request -> Manager approve -> Purchase Order).
-*   **Expenses**: Operational cost tracking and budgeting.
-*   **Staff Management**: Role-based access control (Manager, Chef, Server).
-*   **Hybrid Data Mode**: Works with a local backend/MySQL or falls back to browser LocalStorage for demos automatically.
+*   **Point of Sale (POS)**: Intuitive touch-interface for table management, order taking, and billing. Supports split payments and custom items.
+*   **Kitchen Display System (KDS)**: Real-time ticket management with color-coded urgency and preparation status tracking.
+*   **Inventory & Procurement**: Ingredient-level stock tracking with automated low-stock alerts and purchase requisition workflow (Chef → Manager → PO).
+*   **Staff Management**: Role-based access control (RBAC) for Managers, Chefs, and Servers with custom permission toggles.
+*   **Financials**: Expense tracking, daily sales reporting, and visual revenue analytics.
+*   **Hybrid Data Architecture**:
+    *   **Cloud Mode**: Connects to a robust MySQL backend for production.
+    *   **Local Demo Mode**: Automatically falls back to browser `localStorage` if the backend is unreachable, making it perfect for demos and offline testing.
 
-## Tech Stack
+## 🛠️ Tech Stack
 
-*   **Frontend**: React 18, Tailwind CSS, Lucide React, Recharts.
+*   **Frontend**: React 18, Tailwind CSS, Lucide React (Icons), Recharts (Analytics).
 *   **Build Tool**: Vite.
 *   **Backend**: Node.js, Express.
-*   **Database**: MySQL (via mysql2) or Cloud SQL.
+*   **Database**: MySQL (using `mysql2` with connection pooling).
+*   **Deployment**: Ready for Vercel/Netlify (Frontend) and Google Cloud Run/App Engine (Backend).
 
-## Getting Started
+## ⚡ Getting Started
 
 ### Prerequisites
 
-*   Node.js (v18+)
-*   MySQL Database (Optional, for production mode)
+*   Node.js (v18 or higher)
+*   npm or yarn
+*   *(Optional)* MySQL Server for full-stack mode.
 
-### Installation
-
-1.  Clone the repository:
-    ```bash
-    git clone https://github.com/yourusername/bihari-chatkara-rms.git
-    cd bihari-chatkara-rms
-    ```
-
-2.  Install dependencies:
-    ```bash
-    npm install
-    ```
-
-3.  Set up Environment Variables:
-    Copy `.env.example` to `.env`.
-    ```bash
-    cp .env.example .env
-    ```
-    If you are running the backend, update `.env` with your MySQL credentials. If you just want to run the frontend in **Demo Mode**, you can skip this step or leave the defaults.
-
-### Running Locally (Development)
-
-1.  **Frontend Only (Demo Mode)**:
-    Runs the React app with LocalStorage (no database required).
-    ```bash
-    npm run dev
-    ```
-    Open [http://localhost:3000](http://localhost:3000).
-
-2.  **Full Stack (Frontend + Backend)**:
-    Ensure your MySQL server is running and credentials are in `.env`.
-    
-    *Terminal 1 (Backend):*
-    ```bash
-    npm start
-    ```
-    
-    *Terminal 2 (Frontend):*
-    ```bash
-    npm run dev
-    ```
-
-### Building for Production
-
-To create a production build (outputs to `dist/`):
+### 1. Clone the Repository
 
 ```bash
-npm run build
+git clone https://github.com/yourusername/bihari-chatkara-rms.git
+cd bihari-chatkara-rms
+npm install
 ```
 
-## Project Structure
+### 2. Configuration
 
-*   `/components` - React UI components (POS, KDS, Dashboard, etc.)
-*   `/services` - API adapters and Logic (DB connection, AI service).
-*   `App.tsx` - Main routing and layout logic.
-*   `server.js` - Node.js Express server for MySQL connectivity.
-*   `types.ts` - TypeScript interfaces.
+Create a `.env` file in the root directory. You can use the example below:
 
-## Demo Credentials
+```env
+# --- BACKEND CONFIGURATION (Only for Full Stack Mode) ---
+PORT=8080
 
-The application comes with a **Demo Mode** enabled by default. Click the role buttons on the login screen or use:
+# Database Credentials
+DB_HOST=127.0.0.1
+DB_PORT=3306
+DB_USER=root
+DB_PASSWORD=your_password
+DB_NAME=chatkara
+
+# Google Cloud SQL (Optional - Production)
+# INSTANCE_CONNECTION_NAME=project:region:instance
+```
+
+### 3. Running the Application
+
+#### Option A: Local Demo Mode (Frontend Only)
+*Ideal for quick testing or portfolios. No database required.*
+
+The app detects if the backend is unreachable and automatically switches to using your browser's Local Storage.
+
+```bash
+npm run dev
+```
+Open [http://localhost:3000](http://localhost:3000) in your browser.
+
+#### Option B: Full Stack Mode
+*Production simulation with MySQL.*
+
+1. Ensure your MySQL server is running.
+2. The server automatically creates tables and seeds default data on the first run.
+
+```bash
+# Terminal 1: Start the Backend API
+npm start
+
+# Terminal 2: Start the Frontend
+npm run dev
+```
+
+## 🔐 Default Credentials
+
+When running in **Local Demo Mode** (or after fresh DB seeding), use these credentials:
 
 | Role | Email | Password |
 |------|-------|----------|
-| **Admin** | `admin@biharichatkara.com` | `admin123` |
+| **Admin/Manager** | `admin@biharichatkara.com` | `admin123` |
 | **Chef** | `chef@biharichatkara.com` | `chef123` |
-| **Staff** | `server@biharichatkara.com` | `server123` |
+| **Server** | `server@biharichatkara.com` | `server123` |
 
-## License
+## 📦 Deployment
 
-MIT License. See [LICENSE](LICENSE) for details.
+### Frontend (Static)
+Run the build command to generate the `dist` folder.
+```bash
+npm run build
+```
+Upload the `dist` folder to any static host (Vercel, Netlify, GitHub Pages, Hostinger).
+
+### Backend (API)
+The `server.js` is production-ready.
+1. Set `NODE_ENV=production`.
+2. Configure environment variables on your cloud provider.
+3. Deploy to platforms like Google Cloud Run, Heroku, or DigitalOcean App Platform.
+
+## 🤝 Contributing
+
+1. Fork the Project
+2. Create your Feature Branch (`git checkout -b feature/AmazingFeature`)
+3. Commit your Changes (`git commit -m 'Add some AmazingFeature'`)
+4. Push to the Branch (`git push origin feature/AmazingFeature`)
+5. Open a Pull Request
+
+## 📄 License
+
+Distributed under the MIT License. See `LICENSE` for more information.

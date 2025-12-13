@@ -1,7 +1,7 @@
 
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { MenuItem, Order, OrderStatus, PaymentStatus, LineItem, PaymentMethod, UserRole } from '../types';
-import { Plus, Minus, Trash2, Send, CreditCard, ShoppingCart, Banknote, Smartphone, Search, X, Clock, CheckCircle, Receipt, AlertCircle, Zap, Tag, Percent, Ban, Eye, EyeOff, Power, Printer, Pencil, Save, ChevronUp, ChevronDown, ArrowLeft, Check, LayoutGrid, Utensils, Timer, FileText, SkipForward, MessageSquare, RotateCcw, TabletSmartphone, Loader2 } from 'lucide-react';
+import { Plus, Minus, Trash2, Send, CreditCard, ShoppingCart, Banknote, Smartphone, Search, X, Clock, CheckCircle, Receipt, AlertCircle, Zap, Tag, Percent, Ban, Eye, EyeOff, Power, Printer, Pencil, Save, ChevronUp, ChevronDown, ArrowLeft, Check, LayoutGrid, Utensils, Timer, FileText, SkipForward, MessageSquare, RotateCcw, TabletSmartphone, Loader2, Calculator } from 'lucide-react';
 import { format, formatDistanceToNow } from 'date-fns';
 
 interface POSProps {
@@ -43,6 +43,8 @@ const POS: React.FC<POSProps> = ({ orders, menuItems, onPlaceOrder, onUpdateOrde
   const [selectedCategory, setSelectedCategory] = useState<string>('All');
   const [selectedSubCategory, setSelectedSubCategory] = useState<string>('All');
   const [showPaymentOptions, setShowPaymentOptions] = useState(false);
+  const [paymentStep, setPaymentStep] = useState<'method' | 'cash'>('method'); // New state for payment flow
+  const [cashTendered, setCashTendered] = useState(''); // New state for cash calc
   const [searchQuery, setSearchQuery] = useState('');
   
   // Editing existing order state
@@ -302,7 +304,12 @@ const POS: React.FC<POSProps> = ({ orders, menuItems, onPlaceOrder, onUpdateOrde
   };
 
   const constructOrderObject = (status: OrderStatus = OrderStatus.NEW, paymentStatus: PaymentStatus = PaymentStatus.PENDING, method?: PaymentMethod): Order => {
-      const tableNum = selectedTable || (Math.floor(Math.random() * 20) + 1);
+      let tableNum = selectedTable;
+      
+      if (tableNum === null) {
+          if (editingOrder) tableNum = editingOrder.tableNumber;
+          else tableNum = 0; 
+      }
       
       return {
           id: editingOrder ? editingOrder.id : `o-${Math.floor(Math.random() * 10000)}`,
@@ -320,7 +327,12 @@ const POS: React.FC<POSProps> = ({ orders, menuItems, onPlaceOrder, onUpdateOrde
 
   const handleKitchenSend = () => {
     if (currentCart.length === 0) return;
-    const newOrder = constructOrderObject();
+    
+    const newStatus = editingOrder && editingOrder.status !== OrderStatus.SERVED && editingOrder.status !== OrderStatus.READY 
+        ? editingOrder.status 
+        : OrderStatus.NEW;
+
+    const newOrder = constructOrderObject(newStatus);
     
     if (editingOrder) {
         onUpdateOrder(newOrder);
@@ -357,6 +369,11 @@ const POS: React.FC<POSProps> = ({ orders, menuItems, onPlaceOrder, onUpdateOrde
       setShowPrintModal(true);
   };
 
+  const handleInitiateCashPayment = () => {
+      setPaymentStep('cash');
+      setCashTendered('');
+  };
+
   const handlePayment = (method: PaymentMethod, existingOrderId?: string) => {
     let orderToPrint: Order | null = null;
 
@@ -369,7 +386,9 @@ const POS: React.FC<POSProps> = ({ orders, menuItems, onPlaceOrder, onUpdateOrde
         setSettleOrderId(null);
     } else {
         if (currentCart.length === 0) return;
-        const newOrder = constructOrderObject(OrderStatus.NEW, PaymentStatus.PAID, method);
+        
+        const statusToUse = editingOrder ? editingOrder.status : OrderStatus.NEW;
+        const newOrder = constructOrderObject(statusToUse, PaymentStatus.PAID, method);
         
         if (editingOrder) {
             onUpdateOrder(newOrder);
@@ -392,7 +411,6 @@ const POS: React.FC<POSProps> = ({ orders, menuItems, onPlaceOrder, onUpdateOrde
 
   const handlePaytmPayment = () => {
       setIsPaytmProcessing(true);
-      // Simulate hardware communication delay (Waiting for customer to pay on machine)
       setTimeout(() => {
           setIsPaytmProcessing(false);
           handlePayment(PaymentMethod.PAYTM_POS);
@@ -402,6 +420,8 @@ const POS: React.FC<POSProps> = ({ orders, menuItems, onPlaceOrder, onUpdateOrde
   const resetOrderState = () => {
     setCurrentCart([]);
     setShowPaymentOptions(false);
+    setPaymentStep('method');
+    setCashTendered('');
     setManualTaxRate('');
     setManualDiscount('');
     setEditingOrder(null);
@@ -439,7 +459,7 @@ const POS: React.FC<POSProps> = ({ orders, menuItems, onPlaceOrder, onUpdateOrde
           setCurrentCart([...activeOrder.items]);
           setManualTaxRate(activeOrder.taxRate?.toString() || '');
           setManualDiscount(activeOrder.discount?.toString() || '');
-          setShowPaymentOptions(false);
+          setShowPaymentOptions(true);
           setActiveView('new_order');
       }
       setOccupiedTableId(null);
@@ -470,6 +490,7 @@ const POS: React.FC<POSProps> = ({ orders, menuItems, onPlaceOrder, onUpdateOrde
   });
 
   const renderTablesView = () => {
+      // ... (No Changes)
       return (
           <div className="h-full bg-slate-50 p-4 overflow-y-auto relative">
                <div className="flex justify-between items-center mb-6">
@@ -575,6 +596,7 @@ const POS: React.FC<POSProps> = ({ orders, menuItems, onPlaceOrder, onUpdateOrde
   };
 
   const renderHistoryView = () => {
+      // ... (No Changes)
       const servedUnpaid = orders.filter(o => o.status === OrderStatus.SERVED && o.paymentStatus === PaymentStatus.PENDING);
       const recentPaid = orders
           .filter(o => o.paymentStatus === PaymentStatus.PAID)
@@ -587,7 +609,7 @@ const POS: React.FC<POSProps> = ({ orders, menuItems, onPlaceOrder, onUpdateOrde
           setCurrentCart([...order.items]);
           setManualTaxRate(order.taxRate?.toString() || '');
           setManualDiscount(order.discount?.toString() || '');
-          setShowPaymentOptions(false); 
+          setShowPaymentOptions(true); 
           setActiveView('new_order');
       };
 
@@ -684,11 +706,15 @@ const POS: React.FC<POSProps> = ({ orders, menuItems, onPlaceOrder, onUpdateOrde
     const taxAmount = taxable * (taxRate / 100);
     const total = taxable + taxAmount;
 
+    // Calc Change
+    const tendered = parseFloat(cashTendered) || 0;
+    const change = Math.max(0, tendered - total);
+
     return (
     <div className="flex flex-col lg:flex-row h-full gap-4 lg:gap-6 overflow-hidden relative">
       <div className={`flex-1 flex flex-col min-w-0 h-full ${showMobileCart ? 'hidden lg:flex' : 'flex'}`}>
         <div className="flex flex-wrap items-center gap-2 mb-4">
-             {activeView === 'new_order' && selectedTable && (
+             {activeView === 'new_order' && selectedTable !== null && (
                  <button onClick={() => { setActiveView('tables'); setSelectedTable(null); setEditingOrder(null); }} className="lg:hidden p-2 bg-slate-100 rounded-lg text-slate-600 mr-2">
                      <ArrowLeft size={20} />
                  </button>
@@ -905,6 +931,7 @@ const POS: React.FC<POSProps> = ({ orders, menuItems, onPlaceOrder, onUpdateOrde
                     placeholder="Custom Item Name"
                     value={cartCustomName}
                     onChange={e => setCartCustomName(e.target.value)}
+                    onKeyDown={(e) => e.key === 'Enter' && handleCartCustomAdd()}
                  />
                  <div className="relative w-20">
                      <span className="absolute left-2 top-1.5 text-xs text-slate-400">₹</span>
@@ -914,6 +941,7 @@ const POS: React.FC<POSProps> = ({ orders, menuItems, onPlaceOrder, onUpdateOrde
                         placeholder="Price"
                         value={cartCustomPrice}
                         onChange={e => setCartCustomPrice(e.target.value)}
+                        onKeyDown={(e) => e.key === 'Enter' && handleCartCustomAdd()}
                      />
                  </div>
                  <button 
@@ -1029,7 +1057,7 @@ const POS: React.FC<POSProps> = ({ orders, menuItems, onPlaceOrder, onUpdateOrde
               <div className="flex flex-col gap-2 pt-2">
                 <div className="grid grid-cols-2 gap-2">
                     <button 
-                        onClick={() => setShowPaymentOptions(true)}
+                        onClick={() => { setShowPaymentOptions(true); setPaymentStep('method'); }}
                         disabled={currentCart.length === 0}
                         className="flex items-center justify-center gap-2 py-3 rounded-xl border-2 border-green-500 text-green-700 bg-green-50 font-bold hover:bg-green-100 disabled:opacity-50 disabled:cursor-not-allowed transition-all active:scale-95"
                     >
@@ -1065,33 +1093,85 @@ const POS: React.FC<POSProps> = ({ orders, menuItems, onPlaceOrder, onUpdateOrde
           ) : (
              <div className="space-y-3 animate-in fade-in slide-in-from-bottom-2 bg-slate-50 p-3 rounded-xl border border-slate-200 relative">
                  <div className="flex justify-between items-center mb-1">
-                    <p className="text-xs font-bold text-slate-500 uppercase">Select Payment Method</p>
+                    <p className="text-xs font-bold text-slate-500 uppercase">{paymentStep === 'cash' ? 'Cash Settlement' : 'Select Payment Method'}</p>
                     <button onClick={() => setShowPaymentOptions(false)} className="text-slate-400 hover:text-slate-600"><X size={16}/></button>
                  </div>
-                 <div className="grid grid-cols-2 gap-3">
-                    <button 
-                        onClick={() => handlePayment(PaymentMethod.CASH)}
-                        className="flex flex-col items-center justify-center p-4 rounded-xl bg-white border-2 border-green-100 text-green-700 hover:border-green-500 hover:shadow-md transition-all active:scale-95"
-                    >
-                        <Banknote size={24} className="mb-2" />
-                        <span className="text-xs font-bold">Cash</span>
-                    </button>
-                    <button 
-                        onClick={() => handlePayment(PaymentMethod.ONLINE)}
-                        className="flex flex-col items-center justify-center p-4 rounded-xl bg-white border-2 border-purple-100 text-purple-700 hover:border-purple-500 hover:shadow-md transition-all active:scale-95"
-                    >
-                        <Smartphone size={24} className="mb-2" />
-                        <span className="text-xs font-bold">UPI / Online</span>
-                    </button>
-                    {/* PAYTM POS BUTTON */}
-                    <button 
-                        onClick={handlePaytmPayment}
-                        className="col-span-2 flex flex-col items-center justify-center p-4 rounded-xl bg-white border-2 border-blue-900 text-blue-900 hover:bg-blue-50 transition-all active:scale-95"
-                    >
-                        <TabletSmartphone size={24} className="mb-2" />
-                        <span className="text-xs font-bold">Paytm Terminal (POS)</span>
-                    </button>
-                 </div>
+                 
+                 {paymentStep === 'method' ? (
+                     <div className="grid grid-cols-2 gap-3">
+                        <button 
+                            onClick={handleInitiateCashPayment}
+                            className="flex flex-col items-center justify-center p-4 rounded-xl bg-white border-2 border-green-100 text-green-700 hover:border-green-500 hover:shadow-md transition-all active:scale-95"
+                        >
+                            <Banknote size={24} className="mb-2" />
+                            <span className="text-xs font-bold">Cash</span>
+                        </button>
+                        <button 
+                            onClick={() => handlePayment(PaymentMethod.ONLINE)}
+                            className="flex flex-col items-center justify-center p-4 rounded-xl bg-white border-2 border-purple-100 text-purple-700 hover:border-purple-500 hover:shadow-md transition-all active:scale-95"
+                        >
+                            <Smartphone size={24} className="mb-2" />
+                            <span className="text-xs font-bold">UPI / Online</span>
+                        </button>
+                        <button 
+                            onClick={handlePaytmPayment}
+                            className="col-span-2 flex flex-col items-center justify-center p-4 rounded-xl bg-white border-2 border-blue-900 text-blue-900 hover:bg-blue-50 transition-all active:scale-95"
+                        >
+                            <TabletSmartphone size={24} className="mb-2" />
+                            <span className="text-xs font-bold">Paytm Terminal (POS)</span>
+                        </button>
+                     </div>
+                 ) : (
+                     <div className="space-y-3 animate-in slide-in-from-right-2">
+                         <div className="bg-white p-3 rounded-lg border border-slate-200 text-center">
+                             <span className="text-xs text-slate-400 uppercase">Amount Due</span>
+                             <div className="text-2xl font-bold text-slate-800">₹{total.toFixed(0)}</div>
+                         </div>
+                         
+                         <div>
+                             <label className="text-[10px] font-bold text-slate-400 uppercase mb-1 block">Cash Tendered</label>
+                             <div className="relative">
+                                 <span className="absolute left-3 top-2.5 text-slate-400 font-bold">₹</span>
+                                 <input 
+                                    type="number" 
+                                    value={cashTendered}
+                                    onChange={e => setCashTendered(e.target.value)}
+                                    className="w-full pl-8 pr-3 py-2 text-lg font-bold border border-slate-300 rounded-lg focus:ring-2 focus:ring-green-500"
+                                    placeholder="0"
+                                    autoFocus
+                                 />
+                             </div>
+                         </div>
+
+                         <div className="flex gap-2">
+                             {[100, 200, 500, 2000].map(amt => (
+                                 <button 
+                                    key={amt}
+                                    onClick={() => setCashTendered(amt.toString())}
+                                    className="flex-1 py-1.5 bg-slate-200 text-slate-600 rounded text-xs font-bold hover:bg-slate-300"
+                                 >
+                                     ₹{amt}
+                                 </button>
+                             ))}
+                             <button onClick={() => setCashTendered(total.toFixed(0))} className="flex-1 py-1.5 bg-blue-100 text-blue-700 rounded text-xs font-bold hover:bg-blue-200">Exact</button>
+                         </div>
+
+                         <div className="flex justify-between items-center bg-green-50 p-3 rounded-lg border border-green-100">
+                             <span className="text-xs font-bold text-green-700 uppercase">Change Due</span>
+                             <span className="text-xl font-black text-green-700">₹{change.toFixed(0)}</span>
+                         </div>
+
+                         <div className="flex gap-2 pt-1">
+                             <button onClick={() => setPaymentStep('method')} className="px-3 py-3 rounded-lg bg-slate-100 text-slate-500 hover:bg-slate-200 font-bold text-xs">Back</button>
+                             <button 
+                                onClick={() => handlePayment(PaymentMethod.CASH)}
+                                className="flex-1 py-3 bg-green-600 text-white rounded-lg font-bold hover:bg-green-700 shadow-lg active:scale-95 flex items-center justify-center gap-2"
+                             >
+                                 <Check size={18} /> Complete Payment
+                             </button>
+                         </div>
+                     </div>
+                 )}
 
                  {/* Paytm Processing Overlay */}
                  {isPaytmProcessing && (
@@ -1208,7 +1288,14 @@ const POS: React.FC<POSProps> = ({ orders, menuItems, onPlaceOrder, onUpdateOrde
                    <div className="space-y-4">
                        <div>
                            <label className="block text-xs font-bold text-slate-500 mb-1">Item Name</label>
-                           <input type="text" value={customItemName} onChange={e => setCustomItemName(e.target.value)} className="w-full border rounded px-3 py-2" placeholder="e.g. Open Food" />
+                           <input 
+                                type="text" 
+                                value={customItemName} 
+                                onChange={e => setCustomItemName(e.target.value)} 
+                                onKeyDown={(e) => e.key === 'Enter' && handleAddCustomItem()}
+                                className="w-full border rounded px-3 py-2" 
+                                placeholder="e.g. Open Food" 
+                           />
                        </div>
 
                        <div>
@@ -1239,6 +1326,7 @@ const POS: React.FC<POSProps> = ({ orders, menuItems, onPlaceOrder, onUpdateOrde
                                         type="number" 
                                         value={customItemPrice} 
                                         onChange={e => setCustomItemPrice(e.target.value)} 
+                                        onKeyDown={(e) => e.key === 'Enter' && handleAddCustomItem()}
                                         className="w-full border rounded pl-5 pr-2 py-2 font-bold" 
                                         placeholder="0" 
                                    />
@@ -1250,6 +1338,7 @@ const POS: React.FC<POSProps> = ({ orders, menuItems, onPlaceOrder, onUpdateOrde
                                     type="number" 
                                     value={customItemQty} 
                                     onChange={e => setCustomItemQty(e.target.value)} 
+                                    onKeyDown={(e) => e.key === 'Enter' && handleAddCustomItem()}
                                     className="w-full border rounded px-3 py-2 font-bold text-center" 
                                     placeholder="1" 
                                />

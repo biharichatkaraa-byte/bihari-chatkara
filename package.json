@@ -2,13 +2,25 @@
 {
   "name": "bihari-chatkara-rms",
   "private": true,
-  "version": "2.3.9",
+  "version": "2.4.0",
   "type": "module",
+  "description": "A comprehensive Restaurant Management System (RMS) featuring POS, KDS, Inventory, and Staff Management.",
+  "keywords": [
+    "react",
+    "restaurant-management",
+    "pos",
+    "kds",
+    "inventory",
+    "typescript",
+    "mysql",
+    "vite"
+  ],
+  "author": "Your Name",
+  "license": "MIT",
   "scripts": {
     "dev": "vite",
     "build": "vite build",
     "start": "node server.js",
-    "gcp-build": "npm run build",
     "preview": "vite preview"
   },
   "dependencies": {

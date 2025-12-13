@@ -1,12 +1,9 @@
 
-import React, { useEffect, useState, useRef } from 'react';
+import React, { useEffect, useState, useRef, useMemo } from 'react';
 import { Order, OrderStatus, MenuItem, UserRole } from '../types';
-import { Clock, CheckCircle, Flame, AlertCircle, Lock, AlertTriangle, ChefHat, BookOpen, X, Sparkles, Loader2, Info, BellRing } from 'lucide-react';
+import { Clock, CheckCircle, Flame, AlertCircle, Lock, AlertTriangle, ChefHat, BookOpen, X, Sparkles, Loader2, Info, BellRing, Volume2, VolumeX } from 'lucide-react';
 import { formatDistanceToNow } from 'date-fns';
 import { generateChefRecipe } from '../services/geminiService';
-
-// Base64 encoded "Glass Ding" sound for kitchen notifications
-const NOTIFICATION_SOUND = "data:audio/mp3;base64,//uQxAAAAANIAAAAAExBTUUzLjEwMKqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqq//uQxAAAAANIAAAAAExBTUUzLjEwMKqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqq//uQxAAAAANIAAAAAExBTUUzLjEwMKqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqq//uQxAAAAANIAAAAAExBTUUzLjEwMKqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqq";
 
 interface KDSProps {
   orders: Order[];
@@ -21,6 +18,10 @@ const KDS: React.FC<KDSProps> = ({ orders, updateOrderStatus, userRole, menuItem
   const [isRinging, setIsRinging] = useState(false);
   const [processingOrderId, setProcessingOrderId] = useState<string | null>(null);
   
+  // Audio State
+  const audioCtxRef = useRef<AudioContext | null>(null);
+  const [audioAllowed, setAudioAllowed] = useState<boolean>(false);
+  
   // Chef AI State
   const [showRecipeModal, setShowRecipeModal] = useState(false);
   const [recipeDish, setRecipeDish] = useState('');
@@ -28,28 +29,96 @@ const KDS: React.FC<KDSProps> = ({ orders, updateOrderStatus, userRole, menuItem
   const [recipeResult, setRecipeResult] = useState('');
   const [isGeneratingRecipe, setIsGeneratingRecipe] = useState(false);
 
-  // Sound Logic
-  const audioRef = useRef<HTMLAudioElement | null>(null);
+  // Check for new orders strictly
+  const hasNewOrders = useMemo(() => orders.some(o => o.status === OrderStatus.NEW), [orders]);
 
+  // Initialize Audio Context on Mount
   useEffect(() => {
     const timer = setInterval(() => setNow(new Date()), 1000 * 60); // Update every minute for relative time
-    return () => clearInterval(timer);
+    
+    // @ts-ignore - Safari support
+    const AudioContextClass = window.AudioContext || window.webkitAudioContext;
+    if (AudioContextClass) {
+        const ctx = new AudioContextClass();
+        audioCtxRef.current = ctx;
+        
+        // Check initial state
+        if (ctx.state === 'running') {
+            setAudioAllowed(true);
+        }
+
+        // Listen for state changes (e.g., if system suspends it)
+        ctx.onstatechange = () => {
+            setAudioAllowed(ctx.state === 'running');
+        };
+    }
+
+    return () => {
+        clearInterval(timer);
+        // Clean up audio context
+        if (audioCtxRef.current && audioCtxRef.current.state !== 'closed') {
+            audioCtxRef.current.close();
+        }
+    };
   }, []);
 
-  // Continuous Ringing Logic
+  // Function to play sound
+  const playKitchenBell = () => {
+      const ctx = audioCtxRef.current;
+      if (!ctx) return;
+      
+      // If browser suspended it, mark as not allowed so UI shows the button
+      if (ctx.state === 'suspended') {
+          setAudioAllowed(false);
+          return;
+      }
+
+      try {
+          const oscillator = ctx.createOscillator();
+          const gainNode = ctx.createGain();
+
+          oscillator.connect(gainNode);
+          gainNode.connect(ctx.destination);
+
+          // Clear, crisp "Ding" sound (High C -> Drop)
+          oscillator.type = 'triangle'; 
+          oscillator.frequency.setValueAtTime(1200, ctx.currentTime); 
+          oscillator.frequency.exponentialRampToValueAtTime(600, ctx.currentTime + 0.1); 
+
+          // Quick attack, longer decay
+          gainNode.gain.setValueAtTime(0, ctx.currentTime);
+          gainNode.gain.linearRampToValueAtTime(0.6, ctx.currentTime + 0.01);
+          gainNode.gain.exponentialRampToValueAtTime(0.01, ctx.currentTime + 1.5);
+
+          oscillator.start(ctx.currentTime);
+          oscillator.stop(ctx.currentTime + 1.5);
+      } catch (e) {
+          console.error("Audio Play Error:", e);
+      }
+  };
+
+  const handleEnableAudio = () => {
+      const ctx = audioCtxRef.current;
+      if (ctx) {
+          ctx.resume().then(() => {
+              setAudioAllowed(true);
+              playKitchenBell(); // Test sound immediately
+          });
+      }
+  };
+
+  // Ringing Logic - Depends ONLY on hasNewOrders boolean, not the orders array itself
   useEffect(() => {
-      const hasNewOrders = orders.some(o => o.status === OrderStatus.NEW);
-      let ringInterval: any = null;
+      let ringInterval: ReturnType<typeof setInterval>;
 
       if (hasNewOrders) {
           setIsRinging(true);
-          // Play immediately
-          playAlertSound();
+          playKitchenBell(); // Immediate play
           
-          // Loop sound every 3 seconds until accepted (Aggressive Alert)
+          // Repeat every 4 seconds
           ringInterval = setInterval(() => {
-              playAlertSound();
-          }, 3000);
+              playKitchenBell();
+          }, 4000);
       } else {
           setIsRinging(false);
       }
@@ -57,20 +126,7 @@ const KDS: React.FC<KDSProps> = ({ orders, updateOrderStatus, userRole, menuItem
       return () => {
           if (ringInterval) clearInterval(ringInterval);
       }
-  }, [orders]);
-
-  const playAlertSound = () => {
-      if (audioRef.current) {
-          audioRef.current.currentTime = 0;
-          const playPromise = audioRef.current.play();
-          if (playPromise !== undefined) {
-              playPromise.catch(e => {
-                  // Auto-play was prevented. This is normal in modern browsers until user interacts.
-                  console.log("Audio play prevented (User interaction required):", e);
-              });
-          }
-      }
-  };
+  }, [hasNewOrders]); 
 
   const canManageOrders = userRole === UserRole.MANAGER || userRole === UserRole.CHEF;
 
@@ -135,9 +191,6 @@ const KDS: React.FC<KDSProps> = ({ orders, updateOrderStatus, userRole, menuItem
 
   return (
     <div className="h-full flex flex-col relative">
-        {/* Short "Kitchen Bell" Sound - Updated with valid MP3 Base64 that is actually audible */}
-        <audio ref={audioRef} preload="auto" src="https://cdn.pixabay.com/download/audio/2022/03/15/audio_c8c8a73467.mp3?filename=notification-sound-7062.mp3" />
-
         <div className="flex justify-between items-center mb-4">
             <div className="flex items-center gap-4">
                 {!canManageOrders ? (
@@ -147,14 +200,28 @@ const KDS: React.FC<KDSProps> = ({ orders, updateOrderStatus, userRole, menuItem
                 ) : (
                     <div className="text-sm text-slate-500 font-medium flex items-center gap-2">
                         Kitchen Display System • {activeOrders.length} Active Tickets
-                        {isRinging && (
+                        
+                        {/* Audio Status Indicator */}
+                        {isRinging && !audioAllowed && (
                             <button 
-                                onClick={playAlertSound}
-                                className="flex items-center gap-1 text-red-600 font-bold animate-pulse px-2 py-1 bg-red-100 rounded border border-red-200 hover:bg-red-200 transition-colors"
-                                title="Click to test sound if silent"
+                                onClick={handleEnableAudio}
+                                className="flex items-center gap-2 text-white font-bold animate-pulse px-3 py-1.5 bg-red-600 rounded-lg shadow-lg hover:bg-red-700 transition-colors ml-4"
+                                title="Browser blocked audio. Click to enable."
                             >
-                                <BellRing size={16} className="animate-bounce" /> NEW ORDER RINGING
+                                <VolumeX size={18} /> CLICK TO ENABLE SOUND
                             </button>
+                        )}
+                        
+                        {isRinging && audioAllowed && (
+                             <div className="flex items-center gap-1 text-green-600 font-bold px-3 py-1.5 bg-green-100 rounded-lg border border-green-200 ml-4">
+                                 <Volume2 size={18} className="animate-bounce" /> RINGING
+                             </div>
+                        )}
+                        
+                        {!isRinging && audioAllowed && (
+                             <button onClick={() => playKitchenBell()} className="text-slate-400 hover:text-blue-500 transition-colors" title="Test Sound">
+                                 <BellRing size={16} />
+                             </button>
                         )}
                     </div>
                 )}
