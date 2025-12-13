@@ -83,15 +83,13 @@ const Dashboard: React.FC<DashboardProps> = ({ orders, expenses = [], allData, o
       if (filterType === '15days') return { start: subDays(now, 15), end: endOfDay(now) };
       if (filterType === '30days') return { start: subDays(now, 30), end: endOfDay(now) };
       if (filterType === 'custom' && customStart && customEnd) {
-          // Use Exact Time specified by user input
           return { start: new Date(customStart), end: new Date(customEnd) };
       }
-      return { start: startOfDay(now), end: endOfDay(now) }; // Default
+      return { start: startOfDay(now), end: endOfDay(now) }; 
   };
 
   const filteredData = useMemo(() => {
       const { start, end } = getDateRange();
-      // Filter orders by creation date for general list view, not just PAID status if we want to see active KOTs
       const filteredOrders = orders.filter(o => 
           isWithinInterval(new Date(o.createdAt), { start, end })
       );
@@ -101,20 +99,32 @@ const Dashboard: React.FC<DashboardProps> = ({ orders, expenses = [], allData, o
       return { orders: filteredOrders, expenses: filteredExpenses };
   }, [orders, expenses, filterType, customStart, customEnd]);
 
+  // Helper to calculate order total with fallback for bugged 0 prices
+  const calculateOrderTotal = (order: Order) => {
+      const subtotal = order.items.reduce((sum, i) => {
+          let price = i.priceAtOrder;
+          // FALLBACK for legacy orders with 0 price: look up current menu price
+          if ((!price || price === 0) && allData?.menuItems) {
+              const menuItem = allData.menuItems.find(m => m.id === i.menuItemId);
+              if (menuItem) price = menuItem.price;
+          }
+          return sum + (price * i.quantity);
+      }, 0);
+      
+      const taxable = Math.max(0, subtotal - (order.discount || 0));
+      const taxAmount = taxable * ((order.taxRate || 0) / 100);
+      return taxable + taxAmount;
+  };
+
   const metrics = useMemo(() => {
       let revenue = 0;
       let cashSales = 0;
       let onlineSales = 0;
       
-      // Calculate revenue based only on PAID orders
       const paidOrders = filteredData.orders.filter(o => o.paymentStatus === PaymentStatus.PAID);
 
       paidOrders.forEach(o => {
-          const subtotal = o.items.reduce((sum, i) => sum + (i.priceAtOrder * i.quantity), 0);
-          const taxable = Math.max(0, subtotal - (o.discount || 0));
-          const taxAmount = taxable * ((o.taxRate || 0) / 100);
-          const total = taxable + taxAmount;
-          
+          const total = calculateOrderTotal(o);
           revenue += total;
 
           if (o.paymentMethod === PaymentMethod.CASH) {
@@ -130,7 +140,7 @@ const Dashboard: React.FC<DashboardProps> = ({ orders, expenses = [], allData, o
       const aov = orderCount > 0 ? revenue / orderCount : 0;
 
       return { revenue, totalExpenses, profit, orderCount, aov, cashSales, onlineSales };
-  }, [filteredData]);
+  }, [filteredData, allData]);
 
   const chartData = useMemo(() => {
       const dataMap = new Map<string, { date: string, revenue: number, orders: number }>();
@@ -141,34 +151,28 @@ const Dashboard: React.FC<DashboardProps> = ({ orders, expenses = [], allData, o
           if (!dataMap.has(dateKey)) dataMap.set(dateKey, { date: dateKey, revenue: 0, orders: 0 });
           
           const entry = dataMap.get(dateKey)!;
-          const subtotal = o.items.reduce((s, i) => s + (i.priceAtOrder * i.quantity), 0);
-          const taxable = Math.max(0, subtotal - (o.discount || 0));
-          const taxAmount = taxable * ((o.taxRate || 0) / 100);
-          const total = taxable + taxAmount;
+          const total = calculateOrderTotal(o);
           
           entry.revenue += total;
           entry.orders += 1;
       });
 
       return Array.from(dataMap.values()).sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
-  }, [filteredData]);
+  }, [filteredData, allData]);
 
   const handleDownloadSalesReport = () => {
       const headers = [
           "Order ID", "Date", "Time", "Table", "Server", "Type", "Order Status",
-          "Payment Status", "Payment Method", "Items Summary", "Subtotal", "Discount", "Tax %", "Tax Amount", "Total Amount"
+          "Payment Status", "Payment Method", "Items Summary", "Total Amount"
       ];
 
       const csvRows = [headers.join(",")];
-
-      // Use filteredData.orders sorted by date descending for export
       const dataToExport = [...filteredData.orders].sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
 
       dataToExport.forEach(order => {
           const date = new Date(order.createdAt);
           const dateStr = format(date, 'yyyy-MM-dd');
           const timeStr = format(date, 'HH:mm:ss');
-          
           const safeString = (str: string) => `"${(str || '').replace(/"/g, '""')}"`;
 
           const itemsSummary = order.items.map(i => {
@@ -176,12 +180,7 @@ const Dashboard: React.FC<DashboardProps> = ({ orders, expenses = [], allData, o
               return `${i.quantity}x ${i.name}${portion}`;
           }).join('; ');
           
-          const subtotal = order.items.reduce((acc, i) => acc + (i.priceAtOrder * i.quantity), 0);
-          const discount = order.discount || 0;
-          const taxRate = order.taxRate || 0;
-          const taxable = Math.max(0, subtotal - discount);
-          const taxAmount = taxable * (taxRate / 100);
-          const total = taxable + taxAmount;
+          const total = calculateOrderTotal(order);
 
           const row = [
               safeString(order.id),
@@ -194,10 +193,6 @@ const Dashboard: React.FC<DashboardProps> = ({ orders, expenses = [], allData, o
               order.paymentStatus,
               order.paymentMethod || "N/A",
               safeString(itemsSummary),
-              subtotal.toFixed(2),
-              discount.toFixed(2),
-              taxRate.toFixed(2),
-              taxAmount.toFixed(2),
               total.toFixed(2)
           ];
           csvRows.push(row.join(","));
