@@ -1,6 +1,6 @@
 
 import React from 'react';
-import { LayoutDashboard, ShoppingCart, UtensilsCrossed, ClipboardList, Users, LogOut, ShieldCheck, Wallet, Truck, ChefHat, Heart } from 'lucide-react';
+import { LayoutDashboard, ShoppingCart, UtensilsCrossed, ClipboardList, Users, LogOut, ShieldCheck, Wallet, Truck, ChefHat, Heart, Settings, History } from 'lucide-react';
 import { User, UserRole } from '../types';
 
 interface SidebarProps {
@@ -27,6 +27,12 @@ const Sidebar: React.FC<SidebarProps> = ({ activeTab, setActiveTab, currentUser,
       label: 'Point of Sale', 
       icon: ShoppingCart, 
       roles: [UserRole.MANAGER, UserRole.SERVER, UserRole.BARTENDER] 
+    },
+    { 
+      id: 'history', 
+      label: 'Order History', 
+      icon: History, 
+      roles: [UserRole.MANAGER, UserRole.SERVER] 
     },
     { 
       id: 'kds', 
@@ -60,8 +66,14 @@ const Sidebar: React.FC<SidebarProps> = ({ activeTab, setActiveTab, currentUser,
     },
     { 
       id: 'staff', 
-      label: 'Staff Management', 
+      label: 'User', 
       icon: Users, 
+      roles: [UserRole.MANAGER] 
+    },
+    { 
+      id: 'settings', 
+      label: 'Settings', 
+      icon: Settings, 
       roles: [UserRole.MANAGER] 
     },
   ];

@@ -48,13 +48,86 @@ const getDbConfig = () => {
 
 const DB_CONFIG = getDbConfig();
 
-// --- SEED DATA ---
+// --- SEED DATA (Comprehensive Inventory) ---
 const SEED_INGREDIENTS = [
-  { id: 'i1', name: 'General Stock', category: 'Pantry', unit: 'kg', unitCost: 100.00, stockQuantity: 100 },
-];
+  // PRODUCE
+  { id: 'i-onion', name: 'Onion (Red)', category: 'Produce', unit: 'kg', unitCost: 30.00, stockQuantity: 50 },
+  { id: 'i-tomato', name: 'Tomato (Hybrid)', category: 'Produce', unit: 'kg', unitCost: 40.00, stockQuantity: 40 },
+  { id: 'i-potato', name: 'Potato', category: 'Produce', unit: 'kg', unitCost: 25.00, stockQuantity: 100 },
+  { id: 'i-garlic', name: 'Garlic', category: 'Produce', unit: 'kg', unitCost: 120.00, stockQuantity: 10 },
+  { id: 'i-ginger', name: 'Ginger', category: 'Produce', unit: 'kg', unitCost: 80.00, stockQuantity: 8 },
+  { id: 'i-coriander', name: 'Coriander Leaves', category: 'Produce', unit: 'kg', unitCost: 60.00, stockQuantity: 5 },
+  { id: 'i-lemon', name: 'Lemon', category: 'Produce', unit: 'pc', unitCost: 5.00, stockQuantity: 100 },
+  { id: 'i-grn-chilli', name: 'Green Chilli', category: 'Produce', unit: 'kg', unitCost: 60.00, stockQuantity: 5 },
+  { id: 'i-capsicum', name: 'Capsicum (Green)', category: 'Produce', unit: 'kg', unitCost: 50.00, stockQuantity: 15 },
+  { id: 'i-cucumber', name: 'Cucumber', category: 'Produce', unit: 'kg', unitCost: 30.00, stockQuantity: 20 },
+  { id: 'i-mint', name: 'Mint Leaves', category: 'Produce', unit: 'kg', unitCost: 40.00, stockQuantity: 2 },
+  { id: 'i-spinach', name: 'Spinach (Palak)', category: 'Produce', unit: 'kg', unitCost: 30.00, stockQuantity: 10 },
+  { id: 'i-carrot', name: 'Carrot', category: 'Produce', unit: 'kg', unitCost: 40.00, stockQuantity: 15 },
+  { id: 'i-cabbage', name: 'Cabbage', category: 'Produce', unit: 'kg', unitCost: 20.00, stockQuantity: 20 },
+  { id: 'i-cauliflower', name: 'Cauliflower', category: 'Produce', unit: 'kg', unitCost: 35.00, stockQuantity: 15 },
 
-const SEED_MENU_ITEMS = [
-  { id: 'm1', categoryId: 'Tawa', subCategoryId: 'Mutton', name: 'Tawa Keema Kaleji', category: 'Tawa', price: 550, portionPrices: { half: 300, full: 550 }, isVeg: false, available: true, ingredients: [] },
+  // DAIRY
+  { id: 'i-milk', name: 'Milk (Full Cream)', category: 'Dairy', unit: 'l', unitCost: 66.00, stockQuantity: 50 },
+  { id: 'i-paneer', name: 'Paneer (Cottage Cheese)', category: 'Dairy', unit: 'kg', unitCost: 380.00, stockQuantity: 20 },
+  { id: 'i-butter', name: 'Butter (Salted)', category: 'Dairy', unit: 'kg', unitCost: 520.00, stockQuantity: 10 },
+  { id: 'i-cream', name: 'Fresh Cream', category: 'Dairy', unit: 'l', unitCost: 220.00, stockQuantity: 10 },
+  { id: 'i-curd', name: 'Curd/Yogurt', category: 'Dairy', unit: 'kg', unitCost: 70.00, stockQuantity: 25 },
+  { id: 'i-cheese-moz', name: 'Mozzarella Cheese', category: 'Dairy', unit: 'kg', unitCost: 450.00, stockQuantity: 15 },
+  { id: 'i-cheese-sl', name: 'Cheese Slices', category: 'Dairy', unit: 'pkt', unitCost: 140.00, stockQuantity: 20 },
+  { id: 'i-ghee', name: 'Desi Ghee', category: 'Dairy', unit: 'l', unitCost: 650.00, stockQuantity: 10 },
+
+  // PROTEINS
+  { id: 'i-chk-breast', name: 'Chicken Breast (Boneless)', category: 'Meat', unit: 'kg', unitCost: 280.00, stockQuantity: 30 },
+  { id: 'i-chk-bone', name: 'Chicken Curry Cut', category: 'Meat', unit: 'kg', unitCost: 220.00, stockQuantity: 40 },
+  { id: 'i-mutton', name: 'Mutton (Goat)', category: 'Meat', unit: 'kg', unitCost: 750.00, stockQuantity: 10 },
+  { id: 'i-fish-basa', name: 'Fish Fillet (Basa)', category: 'Meat', unit: 'kg', unitCost: 350.00, stockQuantity: 15 },
+  { id: 'i-eggs', name: 'Eggs', category: 'Meat', unit: 'tray', unitCost: 180.00, stockQuantity: 20 },
+
+  // PANTRY
+  { id: 'i-rice-bas', name: 'Rice (Basmati)', category: 'Pantry', unit: 'kg', unitCost: 90.00, stockQuantity: 100 },
+  { id: 'i-rice-sona', name: 'Rice (Sona Masoori)', category: 'Pantry', unit: 'kg', unitCost: 55.00, stockQuantity: 100 },
+  { id: 'i-atta', name: 'Wheat Flour (Atta)', category: 'Pantry', unit: 'kg', unitCost: 40.00, stockQuantity: 100 },
+  { id: 'i-maida', name: 'Refined Flour (Maida)', category: 'Pantry', unit: 'kg', unitCost: 35.00, stockQuantity: 50 },
+  { id: 'i-besan', name: 'Gram Flour (Besan)', category: 'Pantry', unit: 'kg', unitCost: 80.00, stockQuantity: 20 },
+  { id: 'i-cornflour', name: 'Corn Flour', category: 'Pantry', unit: 'kg', unitCost: 60.00, stockQuantity: 10 },
+  { id: 'i-sugar', name: 'Sugar', category: 'Pantry', unit: 'kg', unitCost: 42.00, stockQuantity: 50 },
+  { id: 'i-salt', name: 'Salt', category: 'Pantry', unit: 'kg', unitCost: 20.00, stockQuantity: 50 },
+  { id: 'i-oil-must', name: 'Mustard Oil', category: 'Pantry', unit: 'l', unitCost: 160.00, stockQuantity: 50 },
+  { id: 'i-oil-ref', name: 'Refined Oil', category: 'Pantry', unit: 'l', unitCost: 130.00, stockQuantity: 100 },
+  { id: 'i-dal-toor', name: 'Toor Dal', category: 'Pantry', unit: 'kg', unitCost: 140.00, stockQuantity: 30 },
+  { id: 'i-dal-moong', name: 'Moong Dal (Yellow)', category: 'Pantry', unit: 'kg', unitCost: 110.00, stockQuantity: 20 },
+  { id: 'i-dal-urad', name: 'Urad Dal (Whole)', category: 'Pantry', unit: 'kg', unitCost: 130.00, stockQuantity: 20 },
+  { id: 'i-chana', name: 'Kabuli Chana', category: 'Pantry', unit: 'kg', unitCost: 100.00, stockQuantity: 20 },
+  { id: 'i-rajma', name: 'Rajma (Kidney Beans)', category: 'Pantry', unit: 'kg', unitCost: 120.00, stockQuantity: 20 },
+
+  // SPICES
+  { id: 'i-jeera', name: 'Cumin Seeds (Jeera)', category: 'Spices', unit: 'kg', unitCost: 400.00, stockQuantity: 5 },
+  { id: 'i-mustard-sd', name: 'Mustard Seeds (Rai)', category: 'Spices', unit: 'kg', unitCost: 150.00, stockQuantity: 5 },
+  { id: 'i-haldi', name: 'Turmeric Powder', category: 'Spices', unit: 'kg', unitCost: 200.00, stockQuantity: 10 },
+  { id: 'i-red-chilli', name: 'Red Chilli Powder', category: 'Spices', unit: 'kg', unitCost: 300.00, stockQuantity: 10 },
+  { id: 'i-dhaniya-pw', name: 'Coriander Powder', category: 'Spices', unit: 'kg', unitCost: 200.00, stockQuantity: 10 },
+  { id: 'i-garam-masala', name: 'Garam Masala', category: 'Spices', unit: 'kg', unitCost: 600.00, stockQuantity: 5 },
+  { id: 'i-cardamom', name: 'Cardamom (Green)', category: 'Spices', unit: 'kg', unitCost: 2500.00, stockQuantity: 1 },
+  { id: 'i-cloves', name: 'Cloves (Laung)', category: 'Spices', unit: 'kg', unitCost: 1200.00, stockQuantity: 1 },
+  { id: 'i-cinnamon', name: 'Cinnamon Sticks', category: 'Spices', unit: 'kg', unitCost: 800.00, stockQuantity: 1 },
+  { id: 'i-bay-leaf', name: 'Bay Leaf (Tej Patta)', category: 'Spices', unit: 'kg', unitCost: 300.00, stockQuantity: 2 },
+  { id: 'i-blk-pepper', name: 'Black Pepper (Whole)', category: 'Spices', unit: 'kg', unitCost: 600.00, stockQuantity: 2 },
+  { id: 'i-chaat-masala', name: 'Chaat Masala', category: 'Spices', unit: 'kg', unitCost: 350.00, stockQuantity: 5 },
+  { id: 'i-kasuri', name: 'Kasuri Methi', category: 'Spices', unit: 'kg', unitCost: 400.00, stockQuantity: 2 },
+
+  // SAUCES
+  { id: 'i-soy', name: 'Dark Soy Sauce', category: 'Condiments', unit: 'l', unitCost: 80.00, stockQuantity: 10 },
+  { id: 'i-vinegar', name: 'White Vinegar', category: 'Condiments', unit: 'l', unitCost: 40.00, stockQuantity: 10 },
+  { id: 'i-chilli-sauce', name: 'Green Chilli Sauce', category: 'Condiments', unit: 'l', unitCost: 60.00, stockQuantity: 10 },
+  { id: 'i-ketchup', name: 'Tomato Ketchup', category: 'Condiments', unit: 'kg', unitCost: 120.00, stockQuantity: 15 },
+  { id: 'i-mayo', name: 'Mayonnaise', category: 'Condiments', unit: 'kg', unitCost: 150.00, stockQuantity: 10 },
+  
+  // BEVERAGES
+  { id: 'i-tea', name: 'Tea Leaves', category: 'Beverages', unit: 'kg', unitCost: 450.00, stockQuantity: 10 },
+  { id: 'i-coffee', name: 'Coffee Powder', category: 'Beverages', unit: 'kg', unitCost: 800.00, stockQuantity: 5 },
+  { id: 'i-water', name: 'Mineral Water (1L)', category: 'Beverages', unit: 'crate', unitCost: 120.00, stockQuantity: 50 },
+  { id: 'i-soda', name: 'Soda (600ml)', category: 'Beverages', unit: 'crate', unitCost: 400.00, stockQuantity: 20 },
 ];
 
 // --- APP INITIALIZATION ---
@@ -91,17 +164,28 @@ const initDb = async (retries = 10, delay = 5000) => {
             await connection.query(`CREATE TABLE IF NOT EXISTS ingredients (id VARCHAR(50) PRIMARY KEY, name VARCHAR(100), category VARCHAR(100), unit VARCHAR(20), unit_cost DECIMAL(10, 2), stock_quantity DECIMAL(10, 2))`);
             await connection.query(`CREATE TABLE IF NOT EXISTS orders (id VARCHAR(50) PRIMARY KEY, table_number INT, server_name VARCHAR(100), status VARCHAR(50), payment_status VARCHAR(50), payment_method VARCHAR(50), created_at VARCHAR(64), tax_rate DECIMAL(5, 2), discount DECIMAL(10, 2))`);
             await connection.query(`CREATE TABLE IF NOT EXISTS order_items (id VARCHAR(50) PRIMARY KEY, order_id VARCHAR(50), menu_item_id VARCHAR(50), name VARCHAR(100), quantity INT, price_at_order DECIMAL(10, 2), portion VARCHAR(50), modifiers TEXT, FOREIGN KEY(order_id) REFERENCES orders(id) ON DELETE CASCADE)`);
+            
+            // Expenses table with receipt_image support (LONGTEXT for Base64)
             await connection.query(`CREATE TABLE IF NOT EXISTS expenses (id VARCHAR(50) PRIMARY KEY, description TEXT, amount DECIMAL(10, 2), category VARCHAR(100), date VARCHAR(64), reported_by VARCHAR(100))`);
+             try {
+                await connection.query(`SELECT receipt_image FROM expenses LIMIT 1`);
+            } catch (err) {
+                console.log("[DB] Adding missing 'receipt_image' column to expenses table...");
+                await connection.query(`ALTER TABLE expenses ADD COLUMN receipt_image LONGTEXT`);
+            }
+
             await connection.query(`CREATE TABLE IF NOT EXISTS requisitions (id VARCHAR(50) PRIMARY KEY, ingredient_id VARCHAR(50), ingredient_name VARCHAR(100), quantity DECIMAL(10, 2), unit VARCHAR(20), urgency VARCHAR(20), status VARCHAR(20), requested_by VARCHAR(100), requested_at VARCHAR(64), notes TEXT, estimated_unit_cost DECIMAL(10, 2), preferred_supplier VARCHAR(100))`);
             await connection.query(`CREATE TABLE IF NOT EXISTS customers (id VARCHAR(50) PRIMARY KEY, name VARCHAR(100), phone VARCHAR(20), email VARCHAR(100), loyalty_points INT, total_visits INT, last_visit VARCHAR(64), notes TEXT)`);
 
             // --- SEEDING ---
             const [userRows] = await connection.query('SELECT count(*) as count FROM users');
             if (Number(userRows[0].count) === 0) {
+                console.log("[DB] Seeding Default Admin User...");
                 await connection.query('INSERT INTO users (id, name, email, role, permissions, password) VALUES (?, ?, ?, ?, ?, ?)', ['u1', 'Administrator', 'admin@biharichatkara.com', 'Manager', '[]', 'admin123']);
             }
             const [ingRows] = await connection.query('SELECT count(*) as count FROM ingredients');
             if (Number(ingRows[0].count) === 0) {
+                console.log("[DB] Seeding Comprehensive Inventory...");
                 for (const i of SEED_INGREDIENTS) await connection.query('INSERT INTO ingredients (id, name, category, unit, unit_cost, stock_quantity) VALUES (?, ?, ?, ?, ?, ?)', [i.id, i.name, i.category, i.unit, i.unitCost, i.stockQuantity]);
             }
             
@@ -123,8 +207,9 @@ const initDb = async (retries = 10, delay = 5000) => {
 };
 
 // --- MIDDLEWARE ---
+// Increase JSON payload limit to handle Base64 images
 app.use(cors({ origin: '*', methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'] }));
-app.use(express.json());
+app.use(express.json({ limit: '10mb' }));
 
 // --- HEALTH HANDLER ---
 const healthHandler = async (req, res) => {
@@ -133,7 +218,6 @@ const healthHandler = async (req, res) => {
         try {
             const conn = await pool.getConnection();
             conn.release();
-            // If success, we are technically connected even if tables aren't verified yet
              res.json({
                 status: 'starting',
                 database: 'mysql',
@@ -192,7 +276,7 @@ const parseRow = (row, jsonFields = []) => {
         'unit_cost': 'unitCost', 'stock_quantity': 'stockQuantity', 'reported_by': 'reportedBy', 'ingredient_id': 'ingredientId',
         'ingredient_name': 'ingredientName', 'requested_by': 'requestedBy', 'requested_at': 'requestedAt',
         'estimated_unit_cost': 'estimatedUnitCost', 'preferred_supplier': 'preferredSupplier', 'loyalty_points': 'loyaltyPoints',
-        'total_visits': 'totalVisits', 'last_visit': 'lastVisit'
+        'total_visits': 'totalVisits', 'last_visit': 'lastVisit', 'receipt_image': 'receiptImage'
     };
     const numericFields = ['price', 'unitCost', 'stockQuantity', 'tableNumber', 'taxRate', 'discount', 'quantity', 'priceAtOrder', 'loyaltyPoints', 'totalVisits', 'estimatedUnitCost'];
     const final = {};
@@ -212,7 +296,7 @@ const parseRow = (row, jsonFields = []) => {
 // 3. API Routes
 api.get('/', (req, res) => res.json({ message: "Bihari Chatkara API Root" }));
 
-// Auth - Login
+// Auth - Login Endpoint
 api.post('/login', async (req, res) => {
     const { email, password } = req.body;
     try {
@@ -261,35 +345,21 @@ api.put('/orders/:id', async (req, res) => {
     const connection = await pool.getConnection();
     try {
         await connection.beginTransaction();
-        
-        // 1. Update main order fields
         await connection.query('UPDATE orders SET payment_status = ?, payment_method = ?, status = ?, discount = ?, tax_rate = ? WHERE id = ?', 
             [o.paymentStatus, o.paymentMethod, o.status, o.discount, o.taxRate, req.params.id]);
-        
-        // 2. If items are provided, replace them (Full Update for Editing Orders)
         if (o.items && Array.isArray(o.items)) {
-            // Delete existing items
             await connection.query('DELETE FROM order_items WHERE order_id = ?', [req.params.id]);
-            
-            // Insert new items
             if (o.items.length > 0) {
                 for (const i of o.items) {
-                    await connection.query(
-                        'INSERT INTO order_items (id, order_id, menu_item_id, name, quantity, price_at_order, portion, modifiers) VALUES (?, ?, ?, ?, ?, ?, ?, ?)', 
+                    await connection.query('INSERT INTO order_items (id, order_id, menu_item_id, name, quantity, price_at_order, portion, modifiers) VALUES (?, ?, ?, ?, ?, ?, ?, ?)', 
                         [i.id, req.params.id, i.menuItemId, i.name, i.quantity, i.priceAtOrder, i.portion, JSON.stringify(i.modifiers || [])]
                     );
                 }
             }
         }
-
         await connection.commit();
         res.json({ success: true });
-    } catch (e) { 
-        await connection.rollback(); 
-        res.status(500).json({ error: e.message }); 
-    } finally { 
-        connection.release(); 
-    }
+    } catch (e) { await connection.rollback(); res.status(500).json({ error: e.message }); } finally { connection.release(); }
 });
 api.put('/orders/:id/status', async (req, res) => {
     try { await pool.query('UPDATE orders SET status = ? WHERE id = ?', [req.body.status, req.params.id]); res.json({ success: true }); } catch (e) { res.status(500).json({ error: e.message }); }
@@ -339,10 +409,10 @@ api.get('/expenses', async (req, res) => {
     try { const [rows] = await pool.query('SELECT * FROM expenses'); res.json(rows.map(r => parseRow(r))); } catch (e) { res.status(500).json({ error: e.message }); }
 });
 api.post('/expenses', async (req, res) => {
-    try { const e = req.body; await pool.query('INSERT INTO expenses (id, description, amount, category, date, reported_by) VALUES (?, ?, ?, ?, ?, ?)', [e.id, e.description, e.amount, e.category, new Date(e.date).toISOString(), e.reportedBy]); res.json({ success: true }); } catch (e) { res.status(500).json({ error: e.message }); }
+    try { const e = req.body; await pool.query('INSERT INTO expenses (id, description, amount, category, date, reported_by, receipt_image) VALUES (?, ?, ?, ?, ?, ?, ?)', [e.id, e.description, e.amount, e.category, new Date(e.date).toISOString(), e.reportedBy, e.receiptImage || null]); res.json({ success: true }); } catch (e) { res.status(500).json({ error: e.message }); }
 });
 api.put('/expenses/:id', async (req, res) => {
-    try { const e = req.body; await pool.query('UPDATE expenses SET description=?, amount=?, category=? WHERE id=?', [e.description, e.amount, e.category, req.params.id]); res.json({ success: true }); } catch (e) { res.status(500).json({ error: e.message }); }
+    try { const e = req.body; await pool.query('UPDATE expenses SET description=?, amount=?, category=?, receipt_image=? WHERE id=?', [e.description, e.amount, e.category, e.receiptImage || null, req.params.id]); res.json({ success: true }); } catch (e) { res.status(500).json({ error: e.message }); }
 });
 api.delete('/expenses/:id', async (req, res) => {
     try { await pool.query('DELETE FROM expenses WHERE id = ?', [req.params.id]); res.json({ success: true }); } catch (e) { res.status(500).json({ error: e.message }); }

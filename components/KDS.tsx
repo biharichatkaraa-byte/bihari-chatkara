@@ -1,9 +1,12 @@
 
 import React, { useEffect, useState, useRef } from 'react';
 import { Order, OrderStatus, MenuItem, UserRole } from '../types';
-import { Clock, CheckCircle, Flame, AlertCircle, Lock, AlertTriangle, ChefHat, BookOpen, X, Sparkles, Loader2, Info, Volume2, VolumeX } from 'lucide-react';
+import { Clock, CheckCircle, Flame, AlertCircle, Lock, AlertTriangle, ChefHat, BookOpen, X, Sparkles, Loader2, Info, BellRing } from 'lucide-react';
 import { formatDistanceToNow } from 'date-fns';
 import { generateChefRecipe } from '../services/geminiService';
+
+// Base64 encoded "Glass Ding" sound for kitchen notifications
+const NOTIFICATION_SOUND = "data:audio/mp3;base64,//uQxAAAAANIAAAAAExBTUUzLjEwMKqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqq//uQxAAAAANIAAAAAExBTUUzLjEwMKqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqq//uQxAAAAANIAAAAAExBTUUzLjEwMKqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqq//uQxAAAAANIAAAAAExBTUUzLjEwMKqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqq//uQxAAAAANIAAAAAExBTUUzLjEwMKqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqq";
 
 interface KDSProps {
   orders: Order[];
@@ -15,7 +18,8 @@ interface KDSProps {
 const KDS: React.FC<KDSProps> = ({ orders, updateOrderStatus, userRole, menuItems }) => {
   const [now, setNow] = useState(new Date());
   const [confirmationOrder, setConfirmationOrder] = useState<{ order: Order, nextStatus: OrderStatus } | null>(null);
-  const [isSoundEnabled, setIsSoundEnabled] = useState(false);
+  const [isRinging, setIsRinging] = useState(false);
+  const [processingOrderId, setProcessingOrderId] = useState<string | null>(null);
   
   // Chef AI State
   const [showRecipeModal, setShowRecipeModal] = useState(false);
@@ -32,33 +36,38 @@ const KDS: React.FC<KDSProps> = ({ orders, updateOrderStatus, userRole, menuItem
     return () => clearInterval(timer);
   }, []);
 
-  // Check for New Orders and Play Sound loop
+  // Continuous Ringing Logic
   useEffect(() => {
-      if (!isSoundEnabled) return;
-
       const hasNewOrders = orders.some(o => o.status === OrderStatus.NEW);
-      let interval: any = null;
+      let ringInterval: any = null;
 
       if (hasNewOrders) {
+          setIsRinging(true);
           // Play immediately
           playAlertSound();
-          // Loop every 5 seconds until accepted
-          interval = setInterval(() => {
+          
+          // Loop sound every 3 seconds until accepted (Aggressive Alert)
+          ringInterval = setInterval(() => {
               playAlertSound();
-          }, 5000);
+          }, 3000);
+      } else {
+          setIsRinging(false);
       }
 
       return () => {
-          if (interval) clearInterval(interval);
+          if (ringInterval) clearInterval(ringInterval);
       }
-  }, [orders, isSoundEnabled]);
+  }, [orders]);
 
   const playAlertSound = () => {
       if (audioRef.current) {
           audioRef.current.currentTime = 0;
           const playPromise = audioRef.current.play();
           if (playPromise !== undefined) {
-              playPromise.catch(e => console.log("Audio play failed (interaction needed)", e));
+              playPromise.catch(e => {
+                  // Auto-play was prevented. This is normal in modern browsers until user interacts.
+                  console.log("Audio play prevented (User interaction required):", e);
+              });
           }
       }
   };
@@ -92,14 +101,21 @@ const KDS: React.FC<KDSProps> = ({ orders, updateOrderStatus, userRole, menuItem
       if (nextStatus === OrderStatus.READY || nextStatus === OrderStatus.SERVED) {
           setConfirmationOrder({ order, nextStatus });
       } else {
+          setProcessingOrderId(order.id);
           updateOrderStatus(order.id, nextStatus);
+          // Just a small safety timeout to ensure visual feedback if prop update lags slightly
+          setTimeout(() => {
+              if (processingOrderId === order.id) setProcessingOrderId(null);
+          }, 1000);
       }
   };
 
   const confirmAction = () => {
       if (confirmationOrder) {
+          setProcessingOrderId(confirmationOrder.order.id);
           updateOrderStatus(confirmationOrder.order.id, confirmationOrder.nextStatus);
           setConfirmationOrder(null);
+          setTimeout(() => setProcessingOrderId(null), 1000);
       }
   };
 
@@ -119,8 +135,8 @@ const KDS: React.FC<KDSProps> = ({ orders, updateOrderStatus, userRole, menuItem
 
   return (
     <div className="h-full flex flex-col relative">
-        {/* Valid Beep Sound (Short Sine Wave) */}
-        <audio ref={audioRef} src="data:audio/wav;base64,UklGRl9vT19XQVZFZm10IBAAAAABAAEAQB8AAEAfAAABAAgAZGF0YU" />
+        {/* Short "Kitchen Bell" Sound - Updated with valid MP3 Base64 that is actually audible */}
+        <audio ref={audioRef} preload="auto" src="https://cdn.pixabay.com/download/audio/2022/03/15/audio_c8c8a73467.mp3?filename=notification-sound-7062.mp3" />
 
         <div className="flex justify-between items-center mb-4">
             <div className="flex items-center gap-4">
@@ -129,20 +145,19 @@ const KDS: React.FC<KDSProps> = ({ orders, updateOrderStatus, userRole, menuItem
                         <Lock size={14} /> View Only Mode: Only Chefs and Managers can update order status.
                     </div>
                 ) : (
-                    <div className="text-sm text-slate-500 font-medium">
+                    <div className="text-sm text-slate-500 font-medium flex items-center gap-2">
                         Kitchen Display System • {activeOrders.length} Active Tickets
+                        {isRinging && (
+                            <button 
+                                onClick={playAlertSound}
+                                className="flex items-center gap-1 text-red-600 font-bold animate-pulse px-2 py-1 bg-red-100 rounded border border-red-200 hover:bg-red-200 transition-colors"
+                                title="Click to test sound if silent"
+                            >
+                                <BellRing size={16} className="animate-bounce" /> NEW ORDER RINGING
+                            </button>
+                        )}
                     </div>
                 )}
-                
-                {/* Sound Toggle */}
-                <button 
-                    onClick={() => setIsSoundEnabled(!isSoundEnabled)}
-                    className={`flex items-center gap-2 px-3 py-1.5 rounded-lg text-xs font-bold border transition-colors ${isSoundEnabled ? 'bg-green-100 text-green-700 border-green-200' : 'bg-slate-100 text-slate-500 border-slate-200'}`}
-                    title="Enable Kitchen Ring for New Orders"
-                >
-                    {isSoundEnabled ? <Volume2 size={16} /> : <VolumeX size={16} />}
-                    {isSoundEnabled ? 'Alerts On' : 'Alerts Off'}
-                </button>
             </div>
             
             <button 
@@ -220,27 +235,30 @@ const KDS: React.FC<KDSProps> = ({ orders, updateOrderStatus, userRole, menuItem
                         {order.status === OrderStatus.NEW && (
                             <button 
                                 onClick={() => handleAction(order, OrderStatus.IN_PROGRESS)}
-                                disabled={!canManageOrders}
-                                className="w-full py-3 bg-yellow-500 hover:bg-yellow-600 disabled:bg-slate-300 disabled:cursor-not-allowed text-white font-bold rounded shadow active:scale-95 transition-transform"
+                                disabled={!canManageOrders || processingOrderId === order.id}
+                                className="w-full py-3 bg-yellow-500 hover:bg-yellow-600 disabled:bg-slate-300 disabled:cursor-not-allowed text-white font-bold rounded shadow active:scale-95 transition-transform animate-pulse flex items-center justify-center gap-2"
                             >
-                                Start Cooking
+                                {processingOrderId === order.id ? <Loader2 size={18} className="animate-spin" /> : null}
+                                {processingOrderId === order.id ? 'Starting...' : 'Start Cooking (Stop Ringing)'}
                             </button>
                         )}
                         {order.status === OrderStatus.IN_PROGRESS && (
                             <button 
                                 onClick={() => handleAction(order, OrderStatus.READY)}
-                                disabled={!canManageOrders}
-                                className="w-full py-3 bg-green-600 hover:bg-green-700 disabled:bg-slate-300 disabled:cursor-not-allowed text-white font-bold rounded shadow active:scale-95 transition-transform"
+                                disabled={!canManageOrders || processingOrderId === order.id}
+                                className="w-full py-3 bg-green-600 hover:bg-green-700 disabled:bg-slate-300 disabled:cursor-not-allowed text-white font-bold rounded shadow active:scale-95 transition-transform flex items-center justify-center gap-2"
                             >
+                                {processingOrderId === order.id ? <Loader2 size={18} className="animate-spin" /> : null}
                                 Mark Ready
                             </button>
                         )}
                         {order.status === OrderStatus.READY && (
                             <button 
                                 onClick={() => handleAction(order, OrderStatus.SERVED)}
-                                disabled={!canManageOrders}
-                                className="w-full py-3 bg-slate-600 hover:bg-slate-700 disabled:bg-slate-300 disabled:cursor-not-allowed text-white font-bold rounded shadow active:scale-95 transition-transform"
+                                disabled={!canManageOrders || processingOrderId === order.id}
+                                className="w-full py-3 bg-slate-600 hover:bg-slate-700 disabled:bg-slate-300 disabled:cursor-not-allowed text-white font-bold rounded shadow active:scale-95 transition-transform flex items-center justify-center gap-2"
                             >
+                                {processingOrderId === order.id ? <Loader2 size={18} className="animate-spin" /> : null}
                                 Order Served (Clear)
                             </button>
                         )}
@@ -285,7 +303,7 @@ const KDS: React.FC<KDSProps> = ({ orders, updateOrderStatus, userRole, menuItem
                         </button>
                         <button 
                             onClick={confirmAction}
-                            className="flex-1 py-3 bg-blue-600 text-white rounded-lg font-bold hover:bg-blue-700 transition-colors shadow-lg"
+                            className="flex-1 py-3 bg-blue-600 text-white rounded-lg font-bold hover:bg-blue-700 transition-colors shadow-lg flex items-center justify-center gap-2"
                         >
                             Confirm & Update
                         </button>

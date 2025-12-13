@@ -1,7 +1,7 @@
 
 import React, { useState, useMemo } from 'react';
 import { Expense, User } from '../types';
-import { Plus, Trash2, Calendar, Tag, Filter, TrendingDown, X, Search, ChevronDown, ChevronUp, PieChart as PieIcon, Download, Target, TrendingUp, DollarSign, Pencil, Package, Zap, Wrench, Users, Megaphone, ArrowUp, ArrowDown, ArrowUpDown, ChevronLeft, ChevronRight, Maximize2, Minimize2, Save, User as UserIcon } from 'lucide-react';
+import { Plus, Trash2, Calendar, Tag, Filter, TrendingDown, X, Search, ChevronDown, ChevronUp, PieChart as PieIcon, Download, Target, TrendingUp, DollarSign, Pencil, Package, Zap, Wrench, Users, Megaphone, ArrowUp, ArrowDown, ArrowUpDown, ChevronLeft, ChevronRight, Maximize2, Minimize2, Save, User as UserIcon, Upload, FileText, Image as ImageIcon, Eye } from 'lucide-react';
 import { format, subDays, isSameDay, startOfMonth, endOfMonth, isWithinInterval } from 'date-fns';
 import { PieChart, Pie, Cell, Tooltip, Legend, ResponsiveContainer, BarChart, Bar, XAxis, YAxis, CartesianGrid } from 'recharts';
 
@@ -19,11 +19,13 @@ const Expenses: React.FC<ExpensesProps> = ({ expenses, onAddExpense, onUpdateExp
   
   // View State
   const [isExpandedView, setIsExpandedView] = useState(false);
+  const [viewReceiptImage, setViewReceiptImage] = useState<string | null>(null);
 
   // Modal Form State
   const [description, setDescription] = useState('');
   const [amount, setAmount] = useState('');
   const [category, setCategory] = useState('Inventory');
+  const [receiptFile, setReceiptFile] = useState<string>(''); // Base64 String
 
   // Quick Add Form State
   const [qaDescription, setQaDescription] = useState('');
@@ -73,51 +75,90 @@ const Expenses: React.FC<ExpensesProps> = ({ expenses, onAddExpense, onUpdateExp
       setDescription(expense.description);
       setAmount(expense.amount.toString());
       setCategory(expense.category);
+      setReceiptFile(expense.receiptImage || '');
       setIsAdding(true);
+  };
+
+  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+      const file = e.target.files?.[0];
+      if (file) {
+          if (file.size > 1024 * 1024) { // 1MB Limit for simple base64 storage
+              alert("File is too large! Please select an image under 1MB.");
+              return;
+          }
+          const reader = new FileReader();
+          reader.onloadend = () => {
+              setReceiptFile(reader.result as string);
+          };
+          reader.readAsDataURL(file);
+      }
   };
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    if (description && amount) {
-      if (editingId) {
-          // Update Mode
-          const updatedExpense: Expense = {
-              ...expenses.find(e => e.id === editingId)!,
-              description,
-              amount: parseFloat(amount),
-              category,
-          };
-          onUpdateExpense(updatedExpense);
-      } else {
-          // Add Mode
-          const newExpense: Expense = {
-            id: `e-${Date.now()}`,
+    
+    // Safety Checks
+    if (!description.trim()) {
+        alert("Please enter a description");
+        return;
+    }
+    
+    const parsedAmount = parseFloat(amount);
+    if (!amount || isNaN(parsedAmount) || parsedAmount <= 0) {
+        alert("Please enter a valid amount greater than 0");
+        return;
+    }
+
+    if (editingId) {
+        // Update Mode
+        const existing = expenses.find(e => e.id === editingId);
+        if (existing) {
+            const updatedExpense: Expense = {
+                ...existing,
+                description,
+                amount: parsedAmount,
+                category,
+                receiptImage: receiptFile || undefined
+            };
+            onUpdateExpense(updatedExpense);
+        }
+    } else {
+        // Add Mode
+        const newExpense: Expense = {
+            id: `e-${Date.now()}-${Math.floor(Math.random()*1000)}`,
             description,
-            amount: parseFloat(amount),
+            amount: parsedAmount,
             category,
             date: new Date(),
-            reportedBy: currentUser.name,
-          };
-          onAddExpense(newExpense);
-      }
-      
-      handleCloseModal();
+            reportedBy: currentUser.name || 'Unknown',
+            receiptImage: receiptFile || undefined
+        };
+        onAddExpense(newExpense);
     }
+    
+    handleCloseModal();
   };
 
   const handleQuickAdd = () => {
-      if (!qaDescription || !qaAmount) {
-          alert("Please enter a description and amount.");
+      const parsedAmount = parseFloat(qaAmount);
+      
+      if (!qaDescription.trim()) {
+          alert("Please enter a description");
+          return;
+      }
+      
+      if (!qaAmount || isNaN(parsedAmount) || parsedAmount <= 0) {
+          alert("Please enter a valid amount");
           return;
       }
       
       const newExpense: Expense = {
-        id: `e-qa-${Date.now()}`,
+        id: `e-qa-${Date.now()}-${Math.floor(Math.random()*1000)}`,
         description: qaDescription,
-        amount: parseFloat(qaAmount),
+        amount: parsedAmount,
         category: qaCategory,
         date: new Date(),
-        reportedBy: currentUser.name,
+        reportedBy: currentUser.name || 'Unknown',
       };
       onAddExpense(newExpense);
 
@@ -133,6 +174,7 @@ const Expenses: React.FC<ExpensesProps> = ({ expenses, onAddExpense, onUpdateExp
       setDescription('');
       setAmount('');
       setCategory('Inventory');
+      setReceiptFile('');
   };
 
   const handleClearFilters = () => {
@@ -290,7 +332,7 @@ const Expenses: React.FC<ExpensesProps> = ({ expenses, onAddExpense, onUpdateExp
   );
 
   return (
-    <div className="h-full flex flex-col space-y-4">
+    <div className="h-full flex flex-col space-y-4 relative">
       
       {/* Header & Controls */}
       <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 bg-white p-4 rounded-xl shadow-sm border border-slate-200">
@@ -580,7 +622,7 @@ const Expenses: React.FC<ExpensesProps> = ({ expenses, onAddExpense, onUpdateExp
       {/* Add/Edit Expense Form Modal */}
       {isAdding && (
           <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm animate-in fade-in">
-             <div className="bg-white p-6 rounded-xl shadow-2xl w-full max-w-lg transform transition-all scale-100">
+             <div className="bg-white p-6 rounded-xl shadow-2xl w-full max-w-lg transform transition-all scale-100 max-h-[90vh] overflow-y-auto">
                 <div className="flex justify-between items-center mb-6">
                     <h3 className="font-bold text-xl text-slate-800 flex items-center gap-2">
                         <div className="bg-red-100 p-2 rounded-lg text-red-600">
@@ -617,7 +659,7 @@ const Expenses: React.FC<ExpensesProps> = ({ expenses, onAddExpense, onUpdateExp
                                     onChange={(e) => setAmount(e.target.value)}
                                     className="w-full pl-8 pr-4 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-red-500 font-mono font-medium"
                                     placeholder="0.00"
-                                    min="0"
+                                    min="0.01"
                                     step="0.01"
                                     required
                                 />
@@ -634,6 +676,46 @@ const Expenses: React.FC<ExpensesProps> = ({ expenses, onAddExpense, onUpdateExp
                                 <option key={cat} value={cat}>{cat}</option>
                                 ))}
                             </select>
+                        </div>
+                    </div>
+                    
+                    {/* Receipt Upload Section */}
+                    <div>
+                        <label className="block text-sm font-bold text-slate-700 mb-1">Payment Receipt / Screenshot</label>
+                        <div className="mt-1 flex justify-center px-6 pt-5 pb-6 border-2 border-slate-300 border-dashed rounded-lg bg-slate-50 hover:bg-slate-100 transition-colors relative">
+                            <div className="space-y-1 text-center">
+                                {receiptFile ? (
+                                    <div className="relative">
+                                        <img 
+                                            src={receiptFile} 
+                                            alt="Receipt Preview" 
+                                            className="mx-auto h-32 object-contain rounded-lg shadow-sm"
+                                        />
+                                        <button 
+                                            type="button" 
+                                            onClick={() => setReceiptFile('')}
+                                            className="absolute -top-2 -right-2 bg-red-500 text-white rounded-full p-1 shadow-md hover:bg-red-600"
+                                        >
+                                            <X size={14} />
+                                        </button>
+                                        <p className="text-xs text-green-600 mt-2 font-medium flex items-center justify-center gap-1">
+                                            <FileText size={12} /> Image Selected
+                                        </p>
+                                    </div>
+                                ) : (
+                                    <>
+                                        <Upload className="mx-auto h-12 w-12 text-slate-400" />
+                                        <div className="flex text-sm text-slate-600 justify-center">
+                                            <label htmlFor="file-upload" className="relative cursor-pointer bg-white rounded-md font-medium text-red-600 hover:text-red-500 focus-within:outline-none focus-within:ring-2 focus-within:ring-offset-2 focus-within:ring-red-500">
+                                                <span>Upload a file</span>
+                                                <input id="file-upload" name="file-upload" type="file" className="sr-only" accept="image/*" onChange={handleFileChange} />
+                                            </label>
+                                            <p className="pl-1">or drag and drop</p>
+                                        </div>
+                                        <p className="text-xs text-slate-500">PNG, JPG, GIF up to 1MB</p>
+                                    </>
+                                )}
+                            </div>
                         </div>
                     </div>
 
@@ -654,6 +736,26 @@ const Expenses: React.FC<ExpensesProps> = ({ expenses, onAddExpense, onUpdateExp
                     </div>
                 </form>
              </div>
+          </div>
+      )}
+
+      {/* View Receipt Modal */}
+      {viewReceiptImage && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm animate-in fade-in" onClick={() => setViewReceiptImage(null)}>
+              <div className="relative max-w-3xl max-h-[90vh] bg-transparent p-4 outline-none" onClick={(e) => e.stopPropagation()}>
+                  <button 
+                    onClick={() => setViewReceiptImage(null)}
+                    className="absolute -top-10 right-0 text-white hover:text-red-400 transition-colors"
+                  >
+                      <X size={32} />
+                  </button>
+                  <img src={viewReceiptImage} alt="Receipt Full View" className="max-w-full max-h-[80vh] rounded-lg shadow-2xl border-4 border-white" />
+                  <div className="mt-4 flex justify-center">
+                    <a href={viewReceiptImage} download="receipt.png" className="bg-white text-slate-900 px-4 py-2 rounded-full font-bold flex items-center gap-2 hover:bg-slate-200 transition-colors">
+                        <Download size={18} /> Download Image
+                    </a>
+                  </div>
+              </div>
           </div>
       )}
 
@@ -699,6 +801,7 @@ const Expenses: React.FC<ExpensesProps> = ({ expenses, onAddExpense, onUpdateExp
                  </select>
              </div>
              <button 
+                type="button"
                 onClick={handleQuickAdd}
                 className="w-full md:w-auto px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg text-sm font-bold shadow-sm flex items-center justify-center gap-1"
              >
@@ -715,13 +818,14 @@ const Expenses: React.FC<ExpensesProps> = ({ expenses, onAddExpense, onUpdateExp
                     <SortHeader label="Category" columnKey="category" />
                     <SortHeader label="Reported By" columnKey="reportedBy" />
                     <SortHeader label="Amount" columnKey="amount" align="right" />
+                    <th className="px-6 py-4 font-semibold text-slate-600 text-sm text-right">Receipt</th>
                     <th className="px-6 py-4 font-semibold text-slate-600 text-sm text-right">Actions</th>
                 </tr>
             </thead>
             <tbody className="divide-y divide-slate-100">
                 {paginatedExpenses.length === 0 ? (
                     <tr>
-                        <td colSpan={6} className="text-center py-12 text-slate-400">
+                        <td colSpan={7} className="text-center py-12 text-slate-400">
                             <div className="flex flex-col items-center">
                                 <Search size={32} className="mb-2 opacity-20" />
                                 <p>No expenses found matching your criteria.</p>
@@ -762,6 +866,18 @@ const Expenses: React.FC<ExpensesProps> = ({ expenses, onAddExpense, onUpdateExp
                         </td>
                         <td className="px-6 py-4 text-right font-mono font-bold text-slate-900">
                             -₹{expense.amount.toFixed(2)}
+                        </td>
+                         <td className="px-6 py-4 text-right">
+                            {expense.receiptImage ? (
+                                <button 
+                                    onClick={() => setViewReceiptImage(expense.receiptImage || null)}
+                                    className="p-1.5 bg-blue-50 text-blue-600 rounded hover:bg-blue-100 transition-colors inline-flex items-center gap-1 text-xs font-medium"
+                                >
+                                    <ImageIcon size={14} /> View
+                                </button>
+                            ) : (
+                                <span className="text-xs text-slate-300">-</span>
+                            )}
                         </td>
                         <td className="px-6 py-4 text-right">
                             <div className="flex items-center justify-end gap-1 opacity-0 group-hover:opacity-100 transition-opacity">

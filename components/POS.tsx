@@ -1,7 +1,7 @@
 
 import React, { useState, useEffect, useMemo } from 'react';
 import { MenuItem, Order, OrderStatus, PaymentStatus, LineItem, PaymentMethod, UserRole } from '../types';
-import { Plus, Minus, Trash2, Send, CreditCard, ShoppingCart, Banknote, Smartphone, Search, X, Clock, CheckCircle, Receipt, AlertCircle, Zap, Tag, Percent, Ban, Eye, EyeOff, Power, Printer, Pencil, Save, ChevronUp, ChevronDown, ArrowLeft, Check, LayoutGrid, Utensils, Timer, FileText, SkipForward } from 'lucide-react';
+import { Plus, Minus, Trash2, Send, CreditCard, ShoppingCart, Banknote, Smartphone, Search, X, Clock, CheckCircle, Receipt, AlertCircle, Zap, Tag, Percent, Ban, Eye, EyeOff, Power, Printer, Pencil, Save, ChevronUp, ChevronDown, ArrowLeft, Check, LayoutGrid, Utensils, Timer, FileText, SkipForward, MessageSquare, RotateCcw, TabletSmartphone, Loader2 } from 'lucide-react';
 import { format, formatDistanceToNow } from 'date-fns';
 
 interface POSProps {
@@ -73,7 +73,6 @@ const POS: React.FC<POSProps> = ({ orders, menuItems, onPlaceOrder, onUpdateOrde
   // Custom Item State (Cart Inline)
   const [cartCustomName, setCartCustomName] = useState('');
   const [cartCustomPrice, setCartCustomPrice] = useState('');
-  const [cartCustomQty, setCartCustomQty] = useState('1');
 
   // -- ACTIVE/HISTORY STATE --
   const [settleOrderId, setSettleOrderId] = useState<string | null>(null);
@@ -82,6 +81,9 @@ const POS: React.FC<POSProps> = ({ orders, menuItems, onPlaceOrder, onUpdateOrde
 
   // Feedback States
   const [orderSentSuccess, setOrderSentSuccess] = useState(false);
+  
+  // Paytm POS State
+  const [isPaytmProcessing, setIsPaytmProcessing] = useState(false);
 
   // -- RECEIPT SETTINGS --
   const [receiptDetails, setReceiptDetails] = useState({
@@ -218,7 +220,6 @@ const POS: React.FC<POSProps> = ({ orders, menuItems, onPlaceOrder, onUpdateOrde
   const handleCartCustomAdd = () => {
       if (!cartCustomName || !cartCustomPrice) return;
       const price = parseFloat(cartCustomPrice);
-      const qty = parseInt(cartCustomQty) || 1;
       
       const customItem: MenuItem = {
           id: `custom-${Date.now()}`,
@@ -229,10 +230,9 @@ const POS: React.FC<POSProps> = ({ orders, menuItems, onPlaceOrder, onUpdateOrde
           description: 'Custom Item',
           available: true
       };
-      addToCart(customItem, 'Full', price, qty);
+      addToCart(customItem, 'Full', price, 1);
       setCartCustomName('');
       setCartCustomPrice('');
-      setCartCustomQty('1');
   };
 
   const addToCart = (item: MenuItem, portion: string, price: number, qty: number = 1) => {
@@ -251,7 +251,8 @@ const POS: React.FC<POSProps> = ({ orders, menuItems, onPlaceOrder, onUpdateOrde
         name: item.name,
         quantity: qty,
         priceAtOrder: price,
-        portion: portion
+        portion: portion,
+        modifiers: []
       };
       setCurrentCart([...currentCart, newItem]);
     }
@@ -265,6 +266,24 @@ const POS: React.FC<POSProps> = ({ orders, menuItems, onPlaceOrder, onUpdateOrde
       }
       return item;
     }).filter(item => item.quantity > 0));
+  };
+
+  const handleAddItemNote = (itemId: string) => {
+      const item = currentCart.find(i => i.id === itemId);
+      if (!item) return;
+      const currentNote = item.modifiers ? item.modifiers[0] : '';
+      const newNote = prompt("Add note/instruction for " + item.name + ":", currentNote);
+      if (newNote !== null) {
+          setCurrentCart(prev => prev.map(i => 
+              i.id === itemId ? { ...i, modifiers: newNote ? [newNote] : [] } : i
+          ));
+      }
+  };
+
+  const handleClearCart = () => {
+      if (currentCart.length > 0 && confirm("Are you sure you want to clear the entire order?")) {
+          setCurrentCart([]);
+      }
   };
 
   const calculateSubtotal = () => {
@@ -369,6 +388,15 @@ const POS: React.FC<POSProps> = ({ orders, menuItems, onPlaceOrder, onUpdateOrde
         setShowPrintModal(true);
         setShowMobileCart(false);
     }
+  };
+
+  const handlePaytmPayment = () => {
+      setIsPaytmProcessing(true);
+      // Simulate hardware communication delay (Waiting for customer to pay on machine)
+      setTimeout(() => {
+          setIsPaytmProcessing(false);
+          handlePayment(PaymentMethod.PAYTM_POS);
+      }, 3000);
   };
 
   const resetOrderState = () => {
@@ -636,7 +664,7 @@ const POS: React.FC<POSProps> = ({ orders, menuItems, onPlaceOrder, onUpdateOrde
                                           <td className="p-4 text-sm font-bold text-slate-800">{order.tableNumber || 'Takeaway'}</td>
                                           <td className="p-4 text-sm text-slate-500">{format(safeDate(order.createdAt), 'HH:mm')}</td>
                                           <td className="p-4 text-sm font-bold text-green-600">₹{getOrderTotal(order).toFixed(2)}</td>
-                                          <td className="p-4 text-sm text-slate-500 uppercase font-medium">{order.paymentMethod}</td>
+                                          <td className="p-4 text-sm text-slate-500 uppercase font-medium">{order.paymentMethod === PaymentMethod.PAYTM_POS ? 'Paytm POS' : order.paymentMethod}</td>
                                       </tr>
                                   ))
                               )}
@@ -848,24 +876,63 @@ const POS: React.FC<POSProps> = ({ orders, menuItems, onPlaceOrder, onUpdateOrde
         )}
 
         <div className="p-5 border-b border-slate-100 hidden lg:block">
-          <h2 className="text-xl font-bold text-slate-800 flex items-center gap-2">
-              <ShoppingCart size={20} /> {editingOrder ? `Updating Order #${editingOrder.id.split('-')[1]}` : 'Current Order'}
-          </h2>
-          <div className="flex justify-between items-center mt-1">
+          <div className="flex justify-between items-center">
+              <h2 className="text-xl font-bold text-slate-800 flex items-center gap-2">
+                  <ShoppingCart size={20} /> {editingOrder ? `Order #${editingOrder.id.split('-')[1]}` : 'Current Order'}
+              </h2>
+              {currentCart.length > 0 && (
+                  <button onClick={handleClearCart} className="text-slate-400 hover:text-red-500 transition-colors" title="Clear Cart">
+                      <Trash2 size={18} />
+                  </button>
+              )}
+          </div>
+          <div className="flex justify-between items-center mt-2">
              <p className="text-sm font-semibold text-blue-600 bg-blue-50 px-2 py-0.5 rounded">
                 {selectedTable ? `Table #${selectedTable}` : 'Takeaway / Quick Order'}
              </p>
              {selectedTable && (
-                 <button onClick={() => { setSelectedTable(null); setEditingOrder(null); setActiveView('tables'); }} className="text-xs text-slate-400 underline hover:text-red-500">Change / Cancel</button>
+                 <button onClick={() => { setSelectedTable(null); setEditingOrder(null); setActiveView('tables'); }} className="text-xs text-slate-400 underline hover:text-red-500">Change Table</button>
              )}
           </div>
         </div>
+
+        {/* Quick Inline Add */}
+        <div className="p-3 bg-slate-50 border-b border-slate-200 animate-in fade-in">
+             <div className="flex gap-2">
+                 <input 
+                    type="text" 
+                    className="flex-1 min-w-0 px-2 py-1.5 text-xs border border-slate-300 rounded focus:ring-2 focus:ring-blue-500 outline-none"
+                    placeholder="Custom Item Name"
+                    value={cartCustomName}
+                    onChange={e => setCartCustomName(e.target.value)}
+                 />
+                 <div className="relative w-20">
+                     <span className="absolute left-2 top-1.5 text-xs text-slate-400">₹</span>
+                     <input 
+                        type="number" 
+                        className="w-full pl-5 pr-2 py-1.5 text-xs border border-slate-300 rounded focus:ring-2 focus:ring-blue-500 outline-none"
+                        placeholder="Price"
+                        value={cartCustomPrice}
+                        onChange={e => setCartCustomPrice(e.target.value)}
+                     />
+                 </div>
+                 <button 
+                    onClick={handleCartCustomAdd}
+                    disabled={!cartCustomName || !cartCustomPrice}
+                    className="px-3 py-1.5 bg-slate-800 text-white rounded text-xs font-bold hover:bg-slate-700 disabled:opacity-50 transition-colors flex items-center justify-center gap-1"
+                 >
+                     <Plus size={12} /> Add
+                 </button>
+             </div>
+        </div>
         
-        <div className="flex-1 overflow-y-auto p-4 space-y-3">
+        <div className="flex-1 overflow-y-auto p-4 space-y-3 bg-slate-50/50">
           {currentCart.length === 0 ? (
-            <div className="flex flex-col items-center justify-center py-8">
-              <ShoppingCart size={48} className="mb-2 text-slate-200" />
-              <p className="text-slate-400 text-sm mb-4">Basket is empty</p>
+            <div className="flex flex-col items-center justify-center py-12">
+              <div className="w-16 h-16 bg-slate-100 rounded-full flex items-center justify-center mb-4 text-slate-300">
+                  <ShoppingCart size={32} />
+              </div>
+              <p className="text-slate-400 text-sm mb-4 font-medium">Cart is empty</p>
               {selectedTable === null && <p className="text-xs text-blue-500 mb-4 cursor-pointer hover:underline" onClick={() => setActiveView('tables')}>Select a Table first?</p>}
             </div>
           ) : (
@@ -873,22 +940,41 @@ const POS: React.FC<POSProps> = ({ orders, menuItems, onPlaceOrder, onUpdateOrde
               const displayName = item.name || menuItems.find(m => m.id === item.menuItemId)?.name || 'Unknown Item';
               
               return (
-                <div key={item.id} className="flex justify-between items-start p-3 bg-slate-50 rounded-lg">
-                  <div className="flex-1">
-                    <p className="font-medium text-slate-800">
-                        {displayName} 
-                        <span className="text-xs font-bold text-blue-600 ml-1">({item.portion})</span>
-                    </p>
-                    <p className="text-sm text-slate-500">₹{item.priceAtOrder.toFixed(2)}</p>
+                <div key={item.id} className="p-3 bg-white border border-slate-200 rounded-xl shadow-sm relative group transition-all hover:border-blue-300 hover:shadow-md">
+                  <div className="flex justify-between items-start">
+                    <div className="flex-1 pr-2">
+                        <p className="font-bold text-slate-800 text-sm leading-tight">
+                            {displayName} 
+                            {item.portion && item.portion !== 'Full' && <span className="text-xs font-bold text-blue-600 ml-1">({item.portion})</span>}
+                        </p>
+                        <p className="text-xs text-slate-400 mt-0.5">₹{item.priceAtOrder.toFixed(2)} / unit</p>
+                    </div>
+                    <div className="text-right">
+                        <p className="font-bold text-slate-900">₹{(item.priceAtOrder * item.quantity).toFixed(0)}</p>
+                    </div>
                   </div>
-                  <div className="flex items-center gap-3">
-                    <button onClick={() => updateQuantity(item.id, -1)} className="p-1 hover:bg-slate-200 rounded text-slate-600">
-                      {item.quantity === 1 ? <Trash2 size={16} className="text-red-500" /> : <Minus size={16} />}
-                    </button>
-                    <span className="font-semibold w-6 text-center">{item.quantity}</span>
-                    <button onClick={() => updateQuantity(item.id, 1)} className="p-1 hover:bg-slate-200 rounded text-slate-600">
-                      <Plus size={16} />
-                    </button>
+
+                  {item.modifiers && item.modifiers.length > 0 && (
+                      <div className="mt-2 text-xs font-medium text-orange-600 bg-orange-50 px-2 py-1 rounded border border-orange-100 flex items-start gap-1">
+                          <MessageSquare size={12} className="mt-0.5 flex-shrink-0" />
+                          <span>{item.modifiers[0]}</span>
+                      </div>
+                  )}
+
+                  <div className="flex justify-between items-center mt-3 pt-2 border-t border-slate-100">
+                      <button onClick={() => handleAddItemNote(item.id)} className="text-[10px] font-bold text-slate-400 hover:text-blue-600 flex items-center gap-1 uppercase tracking-wide transition-colors">
+                          <MessageSquare size={12} /> {item.modifiers?.length ? 'Edit Note' : 'Add Note'}
+                      </button>
+
+                      <div className="flex items-center gap-3 bg-slate-100 rounded-lg p-1">
+                        <button onClick={() => updateQuantity(item.id, -1)} className="w-6 h-6 flex items-center justify-center bg-white rounded text-slate-600 shadow-sm hover:text-red-500 transition-colors">
+                          {item.quantity === 1 ? <Trash2 size={14} /> : <Minus size={14} />}
+                        </button>
+                        <span className="font-bold text-slate-800 text-sm w-4 text-center">{item.quantity}</span>
+                        <button onClick={() => updateQuantity(item.id, 1)} className="w-6 h-6 flex items-center justify-center bg-white rounded text-slate-600 shadow-sm hover:text-blue-600 transition-colors">
+                          <Plus size={14} />
+                        </button>
+                      </div>
                   </div>
                 </div>
               )
@@ -896,94 +982,47 @@ const POS: React.FC<POSProps> = ({ orders, menuItems, onPlaceOrder, onUpdateOrde
           )}
         </div>
 
-        <div className="p-6 bg-slate-50 border-t border-slate-200 rounded-b-none lg:rounded-b-2xl space-y-3 pb-safe-area">
-          <div className="mb-3 p-3 bg-white rounded-lg border border-slate-200 shadow-sm">
-              <div className="flex justify-between items-center mb-2">
-                  <span className="text-xs font-bold text-slate-500 uppercase flex items-center gap-1">
-                      <Zap size={12} className="text-yellow-500" /> Quick Custom Item
-                  </span>
-              </div>
-              <div className="space-y-2">
-                  <input 
-                      type="text" 
-                      placeholder="Item Name" 
-                      value={cartCustomName}
-                      onChange={e => setCartCustomName(e.target.value)}
-                      className="w-full px-2 py-1.5 text-xs border border-slate-200 rounded focus:ring-1 focus:ring-blue-500 outline-none"
-                  />
-                  <div className="flex gap-2">
-                      <div className="relative flex-1">
-                          <span className="absolute left-2 top-1.5 text-slate-400 text-xs">₹</span>
-                          <input 
-                              type="number" 
-                              placeholder="Price"
-                              value={cartCustomPrice}
-                              onChange={e => setCartCustomPrice(e.target.value)}
-                              className="w-full pl-5 pr-2 py-1.5 text-xs border border-slate-200 rounded focus:ring-1 focus:ring-blue-500 outline-none"
-                          />
-                      </div>
-                      <input 
-                          type="number" 
-                          placeholder="Qty"
-                          value={cartCustomQty}
-                          onChange={e => setCartCustomQty(e.target.value)}
-                          className="w-12 px-1 py-1.5 text-xs text-center border border-slate-200 rounded focus:ring-1 focus:ring-blue-500 outline-none"
-                      />
-                      <button 
-                          onClick={handleCartCustomAdd}
-                          disabled={!cartCustomName || !cartCustomPrice}
-                          className="bg-slate-800 text-white px-3 py-1.5 rounded text-xs font-bold hover:bg-slate-700 disabled:opacity-50"
-                      >
-                          Add
-                      </button>
-                  </div>
-              </div>
-          </div>
-
+        <div className="p-6 bg-white border-t border-slate-200 rounded-b-none lg:rounded-b-2xl space-y-3 pb-safe-area shadow-[0_-4px_6px_-1px_rgba(0,0,0,0.05)] z-10">
           <div className="grid grid-cols-2 gap-3 mb-2">
               <div>
-                  <label className="block text-xs font-bold text-slate-500 mb-1 flex items-center gap-1">
-                      <Percent size={12} /> GST (%)
-                  </label>
+                  <label className="block text-[10px] font-bold text-slate-400 uppercase mb-1">GST (%)</label>
                   <input 
                     type="number"
                     value={manualTaxRate}
                     onChange={e => setManualTaxRate(e.target.value)}
                     placeholder="0"
-                    className="w-full px-2 py-1.5 text-sm border border-slate-300 rounded focus:ring-1 focus:ring-blue-500"
+                    className="w-full px-2 py-1.5 text-xs font-bold border border-slate-200 rounded bg-slate-50 focus:ring-1 focus:ring-blue-500 focus:bg-white transition-colors"
                   />
               </div>
               <div>
-                  <label className="block text-xs font-bold text-slate-500 mb-1 flex items-center gap-1">
-                      <Tag size={12} /> Discount (₹)
-                  </label>
+                  <label className="block text-[10px] font-bold text-slate-400 uppercase mb-1">Discount (₹)</label>
                   <input 
                     type="number"
                     value={manualDiscount}
                     onChange={e => setManualDiscount(e.target.value)}
                     placeholder="0"
-                    className="w-full px-2 py-1.5 text-sm border border-slate-300 rounded focus:ring-1 focus:ring-blue-500"
+                    className="w-full px-2 py-1.5 text-xs font-bold border border-slate-200 rounded bg-slate-50 focus:ring-1 focus:ring-blue-500 focus:bg-white transition-colors"
                   />
               </div>
           </div>
 
-          <div className="flex justify-between text-slate-600 text-sm">
+          <div className="flex justify-between text-slate-500 text-xs">
             <span>Subtotal</span>
             <span>₹{subtotal.toFixed(2)}</span>
           </div>
           {discount > 0 && (
-              <div className="flex justify-between text-green-600 text-sm font-medium">
+              <div className="flex justify-between text-green-600 text-xs font-bold">
                   <span>Discount</span>
                   <span>-₹{discount.toFixed(2)}</span>
               </div>
           )}
-          <div className="flex justify-between text-slate-600 text-sm">
+          <div className="flex justify-between text-slate-500 text-xs">
             <span>GST ({taxRate}%)</span>
             <span>₹{taxAmount.toFixed(2)}</span>
           </div>
-          <div className="flex justify-between text-xl font-bold text-slate-900 border-t border-slate-200 pt-2">
-            <span>Total</span>
-            <span>₹{total.toFixed(2)}</span>
+          <div className="flex justify-between items-end border-t border-dashed border-slate-300 pt-3 mt-1">
+            <span className="text-sm font-bold text-slate-600">Total Amount</span>
+            <span className="text-2xl font-black text-slate-900 leading-none">₹{total.toFixed(2)}</span>
           </div>
           
           {!showPaymentOptions ? (
@@ -992,17 +1031,17 @@ const POS: React.FC<POSProps> = ({ orders, menuItems, onPlaceOrder, onUpdateOrde
                     <button 
                         onClick={() => setShowPaymentOptions(true)}
                         disabled={currentCart.length === 0}
-                        className="flex items-center justify-center gap-2 py-3 rounded-lg border-2 border-green-500 text-green-700 bg-green-50 font-bold hover:bg-green-100 disabled:opacity-50"
+                        className="flex items-center justify-center gap-2 py-3 rounded-xl border-2 border-green-500 text-green-700 bg-green-50 font-bold hover:bg-green-100 disabled:opacity-50 disabled:cursor-not-allowed transition-all active:scale-95"
                     >
-                    <CreditCard size={18} /> Pay / Settle
+                    <CreditCard size={18} /> Pay Now
                     </button>
                     <button 
                     onClick={handleKitchenSend}
                     disabled={currentCart.length === 0}
-                    className={`flex items-center justify-center gap-2 py-3 rounded-lg text-white font-bold shadow-lg transition-colors ${orderSentSuccess ? 'bg-green-600' : 'bg-blue-600 hover:bg-blue-700 disabled:opacity-50 shadow-blue-200'}`}
+                    className={`flex items-center justify-center gap-2 py-3 rounded-xl text-white font-bold shadow-lg transition-all active:scale-95 ${orderSentSuccess ? 'bg-green-600' : 'bg-blue-600 hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed shadow-blue-200'}`}
                     >
                     {orderSentSuccess ? <Check size={18} /> : <Send size={18} />}
-                    {orderSentSuccess ? 'Sent!' : (editingOrder ? 'Update Order' : 'Send KDS')}
+                    {orderSentSuccess ? 'Sent!' : (editingOrder ? 'Update Order' : 'Send to KDS')}
                     </button>
                 </div>
                 
@@ -1010,44 +1049,60 @@ const POS: React.FC<POSProps> = ({ orders, menuItems, onPlaceOrder, onUpdateOrde
                     <button
                         onClick={handleSkipBill}
                         disabled={currentCart.length === 0}
-                        className="flex items-center justify-center gap-2 py-2 rounded-lg bg-slate-200 text-slate-700 text-xs font-bold hover:bg-slate-300 disabled:opacity-50"
+                        className="flex items-center justify-center gap-2 py-2 rounded-lg bg-slate-100 text-slate-600 text-xs font-bold hover:bg-slate-200 disabled:opacity-50 transition-colors"
                     >
                         <SkipForward size={14} /> Save Draft
                     </button>
                     <button
                         onClick={handlePrintOnly}
                         disabled={currentCart.length === 0}
-                        className="flex items-center justify-center gap-2 py-2 rounded-lg bg-slate-200 text-slate-700 text-xs font-bold hover:bg-slate-300 disabled:opacity-50"
+                        className="flex items-center justify-center gap-2 py-2 rounded-lg bg-slate-100 text-slate-600 text-xs font-bold hover:bg-slate-200 disabled:opacity-50 transition-colors"
                     >
                         <Printer size={14} /> Print Bill
                     </button>
                 </div>
             </div>
           ) : (
-             <div className="space-y-3 animate-in fade-in slide-in-from-bottom-2">
-                 <p className="text-sm font-semibold text-slate-500 text-center mb-1">Select Payment Method</p>
+             <div className="space-y-3 animate-in fade-in slide-in-from-bottom-2 bg-slate-50 p-3 rounded-xl border border-slate-200 relative">
+                 <div className="flex justify-between items-center mb-1">
+                    <p className="text-xs font-bold text-slate-500 uppercase">Select Payment Method</p>
+                    <button onClick={() => setShowPaymentOptions(false)} className="text-slate-400 hover:text-slate-600"><X size={16}/></button>
+                 </div>
                  <div className="grid grid-cols-2 gap-3">
                     <button 
                         onClick={() => handlePayment(PaymentMethod.CASH)}
-                        className="flex flex-col items-center justify-center p-3 rounded-lg bg-green-50 border border-green-200 text-green-700 hover:bg-green-100 transition-colors"
+                        className="flex flex-col items-center justify-center p-4 rounded-xl bg-white border-2 border-green-100 text-green-700 hover:border-green-500 hover:shadow-md transition-all active:scale-95"
                     >
-                        <Banknote size={24} className="mb-1" />
-                        <span className="text-sm font-bold">Cash</span>
+                        <Banknote size={24} className="mb-2" />
+                        <span className="text-xs font-bold">Cash</span>
                     </button>
                     <button 
                         onClick={() => handlePayment(PaymentMethod.ONLINE)}
-                        className="flex flex-col items-center justify-center p-3 rounded-lg bg-purple-50 border border-purple-200 text-purple-700 hover:bg-purple-100 transition-colors"
+                        className="flex flex-col items-center justify-center p-4 rounded-xl bg-white border-2 border-purple-100 text-purple-700 hover:border-purple-500 hover:shadow-md transition-all active:scale-95"
                     >
-                        <Smartphone size={24} className="mb-1" />
-                        <span className="text-sm font-bold">Online</span>
+                        <Smartphone size={24} className="mb-2" />
+                        <span className="text-xs font-bold">UPI / Online</span>
+                    </button>
+                    {/* PAYTM POS BUTTON */}
+                    <button 
+                        onClick={handlePaytmPayment}
+                        className="col-span-2 flex flex-col items-center justify-center p-4 rounded-xl bg-white border-2 border-blue-900 text-blue-900 hover:bg-blue-50 transition-all active:scale-95"
+                    >
+                        <TabletSmartphone size={24} className="mb-2" />
+                        <span className="text-xs font-bold">Paytm Terminal (POS)</span>
                     </button>
                  </div>
-                 <button 
-                    onClick={() => setShowPaymentOptions(false)}
-                    className="w-full py-2 text-sm text-slate-500 hover:text-slate-800"
-                 >
-                    Cancel Payment
-                 </button>
+
+                 {/* Paytm Processing Overlay */}
+                 {isPaytmProcessing && (
+                     <div className="absolute inset-0 bg-white/90 backdrop-blur-sm z-20 flex flex-col items-center justify-center text-center rounded-xl p-4 animate-in fade-in">
+                         <div className="w-16 h-16 bg-blue-900 rounded-full flex items-center justify-center mb-4 shadow-xl">
+                             <Loader2 size={32} className="text-white animate-spin" />
+                         </div>
+                         <h4 className="font-bold text-slate-800 text-lg mb-1">Sending to Terminal...</h4>
+                         <p className="text-xs text-slate-500">Please complete payment on the machine.</p>
+                     </div>
+                 )}
              </div>
           )}
         </div>
@@ -1306,7 +1361,7 @@ const POS: React.FC<POSProps> = ({ orders, menuItems, onPlaceOrder, onUpdateOrde
                       </div>
                       <div className="flex justify-between text-[10px] mt-1">
                           <span>Pay Mode:</span>
-                          <span className="uppercase">{printOrder.paymentMethod || 'DRAFT'}</span>
+                          <span className="uppercase">{printOrder.paymentMethod === PaymentMethod.PAYTM_POS ? 'PAYTM MACHINE' : (printOrder.paymentMethod || 'DRAFT')}</span>
                       </div>
                   </div>
 

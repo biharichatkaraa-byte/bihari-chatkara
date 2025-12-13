@@ -2,13 +2,14 @@
 import React, { useState, useEffect, useRef, useMemo } from 'react';
 import { MenuItem, Ingredient } from '../types';
 import { generateMenuInsights } from '../services/geminiService';
-import { Calculator, Sparkles, ChefHat, Tag, DollarSign, Package, AlertTriangle, Search, Save, RotateCcw, Check, FileUp, Download, ArrowUpDown, ArrowUp, ArrowDown, Filter, Square, CheckSquare, Edit3, X, Plus, Trash2, Pencil, Power, Ban, CheckCircle2 } from 'lucide-react';
+import { Calculator, Sparkles, ChefHat, Tag, DollarSign, Package, AlertTriangle, Search, Save, RotateCcw, Check, FileUp, Download, ArrowUpDown, ArrowUp, ArrowDown, Filter, Square, CheckSquare, Edit3, X, Plus, Trash2, Pencil, Power, Ban, CheckCircle2, Link, Unlink, ScanLine, Camera, Loader2, Image as ImageIcon } from 'lucide-react';
 
 interface InventoryProps {
   ingredients: Ingredient[];
   menuItems: MenuItem[];
   onSave: (ingredients: Ingredient[]) => void;
   onDeleteIngredient: (id: string) => void;
+  onAddIngredient: (ingredient: Ingredient) => void;
   onAddMenuItem: (item: MenuItem) => void;
   onUpdateMenuItem: (item: MenuItem) => void;
   onDeleteMenuItem: (id: string) => void;
@@ -21,11 +22,39 @@ type SortKey = keyof Ingredient | 'totalValue';
 type SortDirection = 'asc' | 'desc';
 type FilterStatus = 'all' | 'low' | 'in_stock';
 
+// Mock AI Bill Detection
+const mockDetectBillItems = (existingIngredients: Ingredient[]) => {
+    return new Promise<{ detected: Partial<Ingredient>[] }>((resolve) => {
+        setTimeout(() => {
+            const randomExisting = existingIngredients.length > 0 ? existingIngredients[Math.floor(Math.random() * existingIngredients.length)] : null;
+            
+            const items: Partial<Ingredient>[] = [
+                { name: 'Tomatoes', stockQuantity: 5, unit: 'kg', unitCost: 40, category: 'Produce' },
+                { name: 'Refined Oil', stockQuantity: 10, unit: 'l', unitCost: 120, category: 'Pantry' },
+                { name: 'Premium Rice', stockQuantity: 25, unit: 'kg', unitCost: 80, category: 'Pantry' }
+            ];
+
+            if (randomExisting) {
+                items.push({ 
+                    id: randomExisting.id, // Match found
+                    name: randomExisting.name, 
+                    stockQuantity: 10, 
+                    unit: randomExisting.unit, 
+                    unitCost: randomExisting.unitCost, 
+                    category: randomExisting.category 
+                });
+            }
+            resolve({ detected: items });
+        }, 2000);
+    });
+};
+
 const Inventory: React.FC<InventoryProps> = ({ 
     ingredients, 
     menuItems, 
     onSave, 
     onDeleteIngredient,
+    onAddIngredient,
     onAddMenuItem,
     onUpdateMenuItem,
     onDeleteMenuItem,
@@ -41,6 +70,10 @@ const Inventory: React.FC<InventoryProps> = ({
   const [isLoadingAi, setIsLoadingAi] = useState(false);
   const [showAddMenuModal, setShowAddMenuModal] = useState(false);
   
+  // Recipe Builder State
+  const [recipeIngId, setRecipeIngId] = useState<string>('');
+  const [recipeQty, setRecipeQty] = useState<string>('');
+
   // Menu Bulk & Edit State
   const [selectedMenuIds, setSelectedMenuIds] = useState<Set<string>>(new Set());
   const [showEditMenuModal, setShowEditMenuModal] = useState(false);
@@ -65,12 +98,23 @@ const Inventory: React.FC<InventoryProps> = ({
   const [showAddIngredientModal, setShowAddIngredientModal] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
-  // New Ingredient State
+  // Add/Edit Ingredient State
+  const [editIngId, setEditIngId] = useState<string | null>(null); // Track if editing
   const [newIngName, setNewIngName] = useState('');
   const [newIngCategory, setNewIngCategory] = useState('');
   const [newIngUnit, setNewIngUnit] = useState('kg');
   const [newIngCost, setNewIngCost] = useState('');
   const [newIngQty, setNewIngQty] = useState('');
+  const [newIngBarcode, setNewIngBarcode] = useState('');
+
+  // Barcode Scanner State
+  const [isScanning, setIsScanning] = useState(false);
+  
+  // Bill Upload State
+  const [showBillModal, setShowBillModal] = useState(false);
+  const [billFile, setBillFile] = useState<string | null>(null);
+  const [isProcessingBill, setIsProcessingBill] = useState(false);
+  const [detectedBillItems, setDetectedBillItems] = useState<Partial<Ingredient>[]>([]);
 
   // Bulk Edit State (Inventory)
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
@@ -89,6 +133,199 @@ const Inventory: React.FC<InventoryProps> = ({
         setLocalIngredients(ingredients);
     }
   }, [ingredients, hasUnsavedChanges]);
+
+  // Barcode Scanner Logic (Html5QrcodeScanner)
+  useEffect(() => {
+      if (isScanning && showAddIngredientModal) {
+          // Use a small timeout to ensure modal DOM is ready
+          const timer = setTimeout(() => {
+              // @ts-ignore
+              if (window.Html5QrcodeScanner) {
+                  // @ts-ignore
+                  const scanner = new window.Html5QrcodeScanner(
+                      "reader", 
+                      { fps: 10, qrbox: { width: 250, height: 250 } },
+                      /* verbose= */ false
+                  );
+                  
+                  const onScanSuccess = (decodedText: string, decodedResult: any) => {
+                      handleScanMatch(decodedText);
+                      scanner.clear();
+                      setIsScanning(false);
+                  };
+                  
+                  const onScanFailure = (error: any) => {
+                      // handle scan failure, usually better to ignore and keep scanning.
+                  };
+
+                  scanner.render(onScanSuccess, onScanFailure);
+              }
+          }, 100);
+          return () => clearTimeout(timer);
+      }
+  }, [isScanning, showAddIngredientModal]);
+
+  const handleScanMatch = (barcode: string) => {
+      // Check if barcode exists
+      const existing = ingredients.find(i => i.barcode === barcode);
+      
+      if (existing) {
+          // Found! Switch to Edit Mode for this item
+          setEditIngId(existing.id);
+          setNewIngName(existing.name);
+          setNewIngCategory(existing.category || '');
+          setNewIngUnit(existing.unit);
+          setNewIngCost(existing.unitCost.toString());
+          setNewIngQty(existing.stockQuantity.toString()); // Show current stock
+          setNewIngBarcode(existing.barcode || '');
+          alert(`Product Found: ${existing.name}. Update stock below.`);
+      } else {
+          // Not found, fill barcode field for new entry
+          setNewIngBarcode(barcode);
+          // Optional: Beep or visual cue
+      }
+  };
+
+  const handleStartAddIngredient = () => {
+      setEditIngId(null);
+      setNewIngName('');
+      setNewIngCategory('');
+      setNewIngUnit('kg');
+      setNewIngCost('');
+      setNewIngQty('');
+      setNewIngBarcode('');
+      setIsScanning(false);
+      setShowAddIngredientModal(true);
+  };
+
+  const handleEditSingleIngredient = (ing: Ingredient) => {
+      setEditIngId(ing.id);
+      setNewIngName(ing.name);
+      setNewIngCategory(ing.category || '');
+      setNewIngUnit(ing.unit);
+      setNewIngCost(ing.unitCost.toString());
+      setNewIngQty(ing.stockQuantity.toString());
+      setNewIngBarcode(ing.barcode || '');
+      setShowAddIngredientModal(true);
+  };
+
+  const handleAddOrUpdateIngredient = () => {
+    if(!newIngName || !newIngCost) {
+        alert("Please enter Name and Cost.");
+        return;
+    }
+    
+    if (editIngId) {
+        // Update existing
+        const updates = {
+            name: newIngName,
+            category: newIngCategory,
+            unit: newIngUnit,
+            unitCost: parseFloat(newIngCost),
+            stockQuantity: parseFloat(newIngQty) || 0,
+            barcode: newIngBarcode
+        };
+        handleLocalUpdate(editIngId, updates); // Update local state immediately
+        onSave(ingredients.map(i => i.id === editIngId ? { ...i, ...updates } : i)); // Persist
+        
+    } else {
+        // Add new
+        const newIngredient: Ingredient = {
+            id: `i-${Date.now()}`,
+            name: newIngName,
+            category: newIngCategory || 'General',
+            unit: newIngUnit,
+            unitCost: parseFloat(newIngCost),
+            stockQuantity: parseFloat(newIngQty) || 0,
+            barcode: newIngBarcode
+        };
+        onAddIngredient(newIngredient);
+        setLocalIngredients(prev => [...prev, newIngredient]);
+    }
+    
+    setShowAddIngredientModal(false);
+  };
+
+  // Bill Upload Logic
+  const handleBillUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+      const file = e.target.files?.[0];
+      if (file) {
+          const reader = new FileReader();
+          reader.onload = (ev) => {
+              setBillFile(ev.target?.result as string);
+              setShowBillModal(true);
+              processBillImage();
+          };
+          reader.readAsDataURL(file);
+      }
+  };
+
+  const processBillImage = async () => {
+      setIsProcessingBill(true);
+      setDetectedBillItems([]);
+      try {
+          const result = await mockDetectBillItems(ingredients);
+          setDetectedBillItems(result.detected);
+      } catch (e) {
+          console.error(e);
+      } finally {
+          setIsProcessingBill(false);
+      }
+  };
+
+  const handleConfirmBillUpdate = () => {
+      if (detectedBillItems.length === 0) return;
+
+      const newItemsToCreate: Ingredient[] = [];
+      const itemsToUpdate: Ingredient[] = [];
+
+      detectedBillItems.forEach(item => {
+          if (item.id) {
+              // Existing item found by ID or logic, update stock (add to current)
+              const existing = ingredients.find(i => i.id === item.id);
+              if (existing) {
+                  itemsToUpdate.push({
+                      ...existing,
+                      stockQuantity: existing.stockQuantity + (item.stockQuantity || 0),
+                      unitCost: item.unitCost || existing.unitCost // Update cost if detected?
+                  });
+              }
+          } else {
+              // New Item
+              newItemsToCreate.push({
+                  id: `i-bill-${Date.now()}-${Math.floor(Math.random()*1000)}`,
+                  name: item.name || 'Unknown',
+                  category: item.category || 'General',
+                  unit: item.unit || 'unit',
+                  unitCost: item.unitCost || 0,
+                  stockQuantity: item.stockQuantity || 0,
+                  barcode: ''
+              });
+          }
+      });
+
+      if (itemsToUpdate.length > 0) {
+          itemsToUpdate.forEach(updated => {
+              handleLocalUpdate(updated.id, updated);
+          });
+          onSave(ingredients.map(i => {
+              const updated = itemsToUpdate.find(u => u.id === i.id);
+              return updated || i;
+          }));
+      }
+
+      if (newItemsToCreate.length > 0) {
+          onBulkAddMenuItems([]); // Just a placeholder, we need bulk add ingredients prop exposed better or loop
+          // Using loop for now as prop is singular or we reuse bulkAddItems if compatible
+          // Wait, we have onAddIngredient. Let's use the local state update logic mostly.
+          newItemsToCreate.forEach(i => onAddIngredient(i));
+          setLocalIngredients(prev => [...prev, ...newItemsToCreate]);
+      }
+
+      setShowBillModal(false);
+      setBillFile(null);
+      alert(`Inventory Updated! ${itemsToUpdate.length} items updated, ${newItemsToCreate.length} new items added.`);
+  };
 
   // Derived Filter Options
   const availableCategories = useMemo(() => {
@@ -110,6 +347,38 @@ const Inventory: React.FC<InventoryProps> = ({
       }
     });
     return totalCost;
+  };
+
+  // Recipe Builder Handlers
+  const handleAddIngredientToRecipe = () => {
+      if (!selectedItem || !recipeIngId || !recipeQty) return;
+      const qty = parseFloat(recipeQty);
+      if (isNaN(qty) || qty <= 0) {
+          alert("Please enter a valid quantity.");
+          return;
+      }
+
+      const updatedItem = { ...selectedItem };
+      // Remove if already exists to overwrite
+      updatedItem.ingredients = updatedItem.ingredients.filter(i => i.ingredientId !== recipeIngId);
+      
+      updatedItem.ingredients.push({
+          ingredientId: recipeIngId,
+          quantity: qty
+      });
+
+      onUpdateMenuItem(updatedItem);
+      setSelectedItem(updatedItem); // Update local view
+      setRecipeIngId('');
+      setRecipeQty('');
+  };
+
+  const handleRemoveIngredientFromRecipe = (ingId: string) => {
+      if (!selectedItem) return;
+      const updatedItem = { ...selectedItem };
+      updatedItem.ingredients = updatedItem.ingredients.filter(i => i.ingredientId !== ingId);
+      onUpdateMenuItem(updatedItem);
+      setSelectedItem(updatedItem);
   };
 
   const handleAiAnalysis = async (item: MenuItem) => {
@@ -137,9 +406,6 @@ const Inventory: React.FC<InventoryProps> = ({
   };
 
   const handleSaveChanges = () => {
-    // Only send the ingredients that have actually changed to minimize I/O
-    // For simplicity in this demo, we send the whole list and let App.tsx handle it,
-    // but typically we'd filter for diffs.
     onSave(localIngredients);
     setHasUnsavedChanges(false);
     setShowSaveSuccess(true);
@@ -151,32 +417,6 @@ const Inventory: React.FC<InventoryProps> = ({
     setHasUnsavedChanges(false);
     setShowSaveSuccess(false);
     setSelectedIds(new Set());
-  };
-
-  const handleAddIngredient = () => {
-    if(!newIngName || !newIngCost) {
-        alert("Please enter a Name and Cost.");
-        return;
-    }
-    
-    const newIngredient: Ingredient = {
-        id: `i-${Date.now()}`,
-        name: newIngName,
-        category: newIngCategory || 'General',
-        unit: newIngUnit,
-        unitCost: parseFloat(newIngCost),
-        stockQuantity: parseFloat(newIngQty) || 0
-    };
-
-    // We can directly call the prop, no need to update localIngredients manually 
-    // because the prop sync effect will handle it once the DB updates.
-    onSave([...ingredients, newIngredient]); 
-    
-    setShowAddIngredientModal(false);
-    setNewIngName('');
-    setNewIngCategory('');
-    setNewIngCost('');
-    setNewIngQty('');
   };
 
   const handleAddMenuItem = () => {
@@ -282,10 +522,6 @@ const Inventory: React.FC<InventoryProps> = ({
           
           // 3. Clear Selection
           setSelectedIds(new Set());
-          
-          // DO NOT reset hasUnsavedChanges here.
-          // If we had pending changes to other items, we want to keep them 'unsaved' status 
-          // so the user knows they still need to click Save, and so useEffect doesn't overwrite them.
       }
   };
 
@@ -341,8 +577,6 @@ const Inventory: React.FC<InventoryProps> = ({
   const handleStockDeleteSingle = (id: string) => {
       if (confirm('Are you sure you want to delete this ingredient?')) {
           onDeleteIngredient(id);
-          // Manually remove from local state to ensure visual consistency 
-          // even if we have unsaved changes blocking the prop sync.
           setLocalIngredients(prev => prev.filter(i => i.id !== id));
       }
   };
@@ -650,6 +884,7 @@ const Inventory: React.FC<InventoryProps> = ({
     <div className="h-full flex flex-col space-y-4 relative">
       <input type="file" accept=".csv" ref={fileInputRef} onChange={handleFileUpload} className="hidden" />
       <input type="file" accept=".csv" ref={menuFileInputRef} onChange={handleMenuFileUpload} className="hidden" />
+      <input type="file" accept="image/*" className="hidden" id="bill-upload" onChange={handleBillUpload} />
 
       <div className="flex flex-col md:flex-row justify-between items-start md:items-center bg-white p-2 md:p-4 rounded-xl shadow-sm border border-slate-200 gap-4">
         <div className="flex space-x-2 overflow-x-auto w-full md:w-auto">
@@ -700,14 +935,14 @@ const Inventory: React.FC<InventoryProps> = ({
                         <div className="flex gap-2">
                           <button
                               onClick={() => handleMenuBulkStockUpdate(false)}
-                              className="text-xs bg-red-600 hover:bg-red-500 px-3 py-1.5 rounded font-bold flex items-center gap-1"
+                              className="text-xs bg-red-600 hover:bg-red-50 px-3 py-1.5 rounded font-bold flex items-center gap-1"
                           >
                               <Ban size={14} /> Out of Stock
                           </button>
                           
                           <button
                               onClick={() => handleMenuBulkStockUpdate(true)}
-                              className="text-xs bg-green-600 hover:bg-green-500 px-3 py-1.5 rounded font-bold flex items-center gap-1"
+                              className="text-xs bg-green-600 hover:bg-green-50 px-3 py-1.5 rounded font-bold flex items-center gap-1"
                           >
                               <CheckCircle2 size={14} /> Available
                           </button>
@@ -866,8 +1101,45 @@ const Inventory: React.FC<InventoryProps> = ({
                             <button onClick={() => handleMenuDeleteSingle(selectedItem.id)} className="p-2 text-slate-500 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors border border-slate-200"><Trash2 size={20} /></button>
                         </div>
                     </div>
+                    
                     <div className="mb-6">
-                        <h3 className="font-semibold text-slate-700 mb-3 flex items-center gap-2"><Calculator size={16} /> Cost Breakdown</h3>
+                        <h3 className="font-semibold text-slate-700 mb-3 flex items-center gap-2"><Calculator size={16} /> Cost & Recipe Breakdown</h3>
+                        
+                        {/* Recipe Builder UI */}
+                        <div className="bg-slate-50 p-3 rounded-lg border border-slate-200 mb-3">
+                            <div className="flex flex-col gap-2">
+                                <label className="text-xs font-bold text-slate-500 uppercase">Add Ingredient to Recipe (for Full Portion)</label>
+                                <div className="flex gap-2 items-center">
+                                    <select 
+                                        className="flex-1 text-sm border border-slate-300 rounded px-2 py-1.5"
+                                        value={recipeIngId}
+                                        onChange={(e) => setRecipeIngId(e.target.value)}
+                                    >
+                                        <option value="">Select Ingredient...</option>
+                                        {ingredients.sort((a,b) => a.name.localeCompare(b.name)).map(ing => (
+                                            <option key={ing.id} value={ing.id}>{ing.name} ({ing.unit})</option>
+                                        ))}
+                                    </select>
+                                    <div className="relative w-24">
+                                        <input 
+                                            type="number" 
+                                            placeholder="Qty" 
+                                            value={recipeQty}
+                                            onChange={(e) => setRecipeQty(e.target.value)}
+                                            className="w-full text-sm border border-slate-300 rounded px-2 py-1.5"
+                                        />
+                                    </div>
+                                    <button 
+                                        onClick={handleAddIngredientToRecipe}
+                                        disabled={!recipeIngId || !recipeQty}
+                                        className="bg-blue-600 text-white px-3 py-1.5 rounded hover:bg-blue-700 disabled:opacity-50 flex items-center gap-1 text-xs font-bold"
+                                    >
+                                        <Link size={14} /> Link
+                                    </button>
+                                </div>
+                            </div>
+                        </div>
+
                         <div className="bg-slate-50 rounded-lg p-4 border border-slate-100 space-y-2">
                             {selectedItem.ingredients.length > 0 ? (
                                 selectedItem.ingredients.map((ref, idx) => {
@@ -875,8 +1147,17 @@ const Inventory: React.FC<InventoryProps> = ({
                                     if (!ing) return null;
                                     const lineCost = ing.unitCost * ref.quantity;
                                     return (
-                                        <div key={idx} className="flex justify-between text-sm border-b border-slate-200 last:border-0 pb-2 last:pb-0">
-                                            <span>{ref.quantity} {ing.unit} {ing.name} (@ ₹{ing.unitCost}/{ing.unit})</span>
+                                        <div key={idx} className="flex justify-between items-center text-sm border-b border-slate-200 last:border-0 pb-2 last:pb-0">
+                                            <div className="flex items-center gap-2">
+                                                <button 
+                                                    onClick={() => handleRemoveIngredientFromRecipe(ref.ingredientId)}
+                                                    className="text-slate-400 hover:text-red-500 transition-colors"
+                                                    title="Remove from recipe"
+                                                >
+                                                    <Unlink size={14} />
+                                                </button>
+                                                <span>{ref.quantity} {ing.unit} {ing.name} (@ ₹{ing.unitCost}/{ing.unit})</span>
+                                            </div>
                                             <span className="font-mono text-slate-600">₹{lineCost.toFixed(2)}</span>
                                         </div>
                                     )
@@ -884,7 +1165,7 @@ const Inventory: React.FC<InventoryProps> = ({
                             ) : (
                                 <p className="text-sm text-slate-400 italic">No specific ingredients linked to this item yet.</p>
                             )}
-                            <div className="flex justify-between font-bold pt-2 text-slate-800">
+                            <div className="flex justify-between font-bold pt-2 text-slate-800 border-t border-slate-300 mt-2">
                                 <span>Total Plate Cost</span>
                                 <span>₹{calculatePlateCost(selectedItem).toFixed(2)}</span>
                             </div>
@@ -984,6 +1265,10 @@ const Inventory: React.FC<InventoryProps> = ({
                     </select>
                  </div>
                  <div className="h-8 w-px bg-slate-300 mx-1 hidden md:block"></div>
+                 <label className="flex items-center gap-2 text-slate-600 bg-white border border-slate-200 hover:bg-slate-50 px-3 py-2 rounded-lg text-sm font-medium transition-colors cursor-pointer shadow-sm">
+                     <FileUp size={16} /> <span className="hidden lg:inline">Upload Bill</span>
+                     <input type="file" accept="image/*" className="hidden" onChange={handleBillUpload} />
+                 </label>
                  <button onClick={handleExportCSV} className="flex items-center gap-2 text-slate-600 bg-white border border-slate-200 hover:bg-slate-50 px-3 py-2 rounded-lg text-sm font-medium transition-colors"><Download size={16} /> <span className="hidden lg:inline">Export</span></button>
                  <button onClick={() => fileInputRef.current?.click()} className="flex items-center gap-2 text-slate-600 bg-white border border-slate-200 hover:bg-slate-50 px-3 py-2 rounded-lg text-sm font-medium transition-colors"><FileUp size={16} /> <span className="hidden lg:inline">Import</span></button>
              </div>
@@ -993,7 +1278,7 @@ const Inventory: React.FC<InventoryProps> = ({
                  {showSaveSuccess && <span className="text-sm text-green-600 font-medium flex items-center gap-1 animate-in fade-in slide-in-from-bottom-2"><Check size={16} /> Saved!</span>}
                  <button onClick={handleResetChanges} disabled={!hasUnsavedChanges} className="text-slate-500 hover:text-slate-800 hover:bg-slate-200 px-3 py-2 rounded-lg transition-colors disabled:opacity-30 disabled:cursor-not-allowed"><RotateCcw size={18} /></button>
                  <button onClick={handleSaveChanges} disabled={!hasUnsavedChanges} className="bg-slate-800 text-white px-4 py-2 rounded-lg flex items-center gap-2 hover:bg-slate-900 shadow-sm disabled:opacity-50 disabled:cursor-not-allowed transition-all active:scale-95"><Save size={18} /> Save</button>
-                 <button onClick={() => setShowAddIngredientModal(true)} className="bg-blue-600 text-white px-4 py-2 rounded-lg flex items-center gap-2 hover:bg-blue-700 shadow-sm transition-all active:scale-95"><Plus size={18} /> Add</button>
+                 <button onClick={handleStartAddIngredient} className="bg-blue-600 text-white px-4 py-2 rounded-lg flex items-center gap-2 hover:bg-blue-700 shadow-sm transition-all active:scale-95"><Plus size={18} /> Add</button>
              </div>
           </div>
           )}
@@ -1014,7 +1299,7 @@ const Inventory: React.FC<InventoryProps> = ({
                   <SortableHeader label="Stock Qty" columnKey="stockQuantity" />
                   <SortableHeader label="Total Value" columnKey="totalValue" />
                   <th className="px-6 py-3 text-xs font-bold text-slate-500 uppercase tracking-wider">Status</th>
-                  <th className="px-6 py-3 w-12"></th>
+                  <th className="px-6 py-3 w-20">Actions</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100">
@@ -1025,7 +1310,11 @@ const Inventory: React.FC<InventoryProps> = ({
                             {selectedIds.has(ing.id) ? <CheckSquare size={20} className="text-blue-600" /> : <Square size={20} />}
                         </button>
                     </td>
-                    <td className="px-6 py-4 font-medium text-slate-800">{ing.name} {ing.stockQuantity < 50 && <span className="ml-2 inline-block w-2 h-2 bg-red-500 rounded-full animate-pulse"></span>}</td>
+                    <td className="px-6 py-4 font-medium text-slate-800">
+                        {ing.name} 
+                        {ing.stockQuantity < 50 && <span className="ml-2 inline-block w-2 h-2 bg-red-500 rounded-full animate-pulse"></span>}
+                        {ing.barcode && <span className="ml-2 text-xs text-slate-400 bg-slate-100 px-1 rounded border border-slate-200"><ScanLine size={10} className="inline mr-0.5"/>{ing.barcode.substring(0,6)}...</span>}
+                    </td>
                     <td className="px-6 py-4 text-slate-500 text-sm">{ing.category ? <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-slate-100 text-slate-600 border border-slate-200">{ing.category}</span> : <span className="text-slate-300">-</span>}</td>
                     <td className="px-6 py-4 text-slate-500 text-sm">{ing.unit}</td>
                     <td className="px-6 py-4">
@@ -1042,9 +1331,14 @@ const Inventory: React.FC<InventoryProps> = ({
                        {ing.stockQuantity < 50 ? <span className="inline-flex items-center gap-1 px-2 py-1 rounded text-xs font-bold bg-red-100 text-red-700 border border-red-200"><AlertTriangle size={12} /> Low Stock</span> : <span className="inline-flex items-center px-2 py-1 rounded text-xs font-bold bg-green-100 text-green-700 border border-green-200">In Stock</span>}
                     </td>
                     <td className="px-6 py-4">
-                        <button onClick={() => handleStockDeleteSingle(ing.id)} className="text-slate-300 hover:text-red-500 transition-colors p-1 rounded-md hover:bg-red-50">
-                            <Trash2 size={16} />
-                        </button>
+                        <div className="flex gap-1">
+                            <button onClick={() => handleEditSingleIngredient(ing)} className="text-slate-400 hover:text-blue-500 transition-colors p-1 rounded-md hover:bg-blue-50">
+                                <Edit3 size={16} />
+                            </button>
+                            <button onClick={() => handleStockDeleteSingle(ing.id)} className="text-slate-300 hover:text-red-500 transition-colors p-1 rounded-md hover:bg-red-50">
+                                <Trash2 size={16} />
+                            </button>
+                        </div>
                     </td>
                   </tr>
                 ))}
@@ -1061,14 +1355,51 @@ const Inventory: React.FC<InventoryProps> = ({
         </div>
       )}
 
+      {/* Add/Edit Ingredient Modal with Scanner */}
       {showAddIngredientModal && (
           <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm animate-in fade-in">
-              <div className="bg-white rounded-2xl shadow-xl p-6 w-full max-w-md m-4">
+              <div className="bg-white rounded-2xl shadow-xl p-6 w-full max-w-md m-4 max-h-[90vh] overflow-y-auto relative">
                   <div className="flex justify-between items-center mb-4">
-                      <h3 className="text-lg font-bold text-slate-800">Add New Ingredient</h3>
+                      <h3 className="text-lg font-bold text-slate-800">{editIngId ? 'Edit Ingredient' : 'Add New Ingredient'}</h3>
                       <button onClick={() => setShowAddIngredientModal(false)} className="text-slate-400 hover:text-slate-600"><X size={20} /></button>
                   </div>
+                  
+                  {isScanning && (
+                      <div className="mb-4 p-2 bg-black rounded-lg relative overflow-hidden h-64 flex items-center justify-center">
+                          <div id="reader" className="w-full h-full"></div>
+                          <button 
+                            onClick={() => setIsScanning(false)}
+                            className="absolute top-2 right-2 bg-white/20 text-white p-1 rounded-full hover:bg-white/40"
+                          >
+                              <X size={16} />
+                          </button>
+                      </div>
+                  )}
+
                   <div className="space-y-4">
+                      <div className="flex items-end gap-2">
+                          <div className="flex-1">
+                              <label className="block text-sm font-medium text-slate-700 mb-1">Barcode</label>
+                              <div className="relative">
+                                  <input 
+                                    type="text" 
+                                    value={newIngBarcode} 
+                                    onChange={e => setNewIngBarcode(e.target.value)} 
+                                    className="w-full px-3 py-2 pl-9 border rounded-lg font-mono text-sm" 
+                                    placeholder="Scan or enter code" 
+                                  />
+                                  <ScanLine size={16} className="absolute left-3 top-2.5 text-slate-400" />
+                              </div>
+                          </div>
+                          <button 
+                            onClick={() => setIsScanning(!isScanning)}
+                            className={`p-2.5 rounded-lg border transition-colors ${isScanning ? 'bg-red-50 border-red-200 text-red-600' : 'bg-slate-50 border-slate-200 text-slate-600 hover:bg-slate-100'}`}
+                            title="Toggle Scanner"
+                          >
+                              {isScanning ? <X size={20}/> : <Camera size={20} />}
+                          </button>
+                      </div>
+
                       <div><label className="block text-sm font-medium text-slate-700 mb-1">Name</label><input type="text" value={newIngName} onChange={e => setNewIngName(e.target.value)} className="w-full px-3 py-2 border rounded-lg" placeholder="e.g. Olive Oil" /></div>
                       <div className="grid grid-cols-2 gap-4">
                           <div><label className="block text-sm font-medium text-slate-700 mb-1">Category</label><input type="text" value={newIngCategory} onChange={e => setNewIngCategory(e.target.value)} className="w-full px-3 py-2 border rounded-lg" placeholder="Pantry" /></div>
@@ -1076,9 +1407,122 @@ const Inventory: React.FC<InventoryProps> = ({
                       </div>
                       <div className="grid grid-cols-2 gap-4">
                           <div><label className="block text-sm font-medium text-slate-700 mb-1">Cost / Unit (₹)</label><input type="number" value={newIngCost} onChange={e => setNewIngCost(e.target.value)} className="w-full px-3 py-2 border rounded-lg" placeholder="0.00" /></div>
-                          <div><label className="block text-sm font-medium text-slate-700 mb-1">Initial Qty</label><input type="number" value={newIngQty} onChange={e => setNewIngQty(e.target.value)} className="w-full px-3 py-2 border rounded-lg" placeholder="0" /></div>
+                          <div><label className="block text-sm font-medium text-slate-700 mb-1">{editIngId ? 'Current Stock' : 'Initial Qty'}</label><input type="number" value={newIngQty} onChange={e => setNewIngQty(e.target.value)} className="w-full px-3 py-2 border rounded-lg" placeholder="0" /></div>
                       </div>
-                      <div className="pt-2"><button onClick={handleAddIngredient} className="w-full py-2 bg-blue-600 text-white rounded-lg font-bold hover:bg-blue-700">Add Ingredient</button></div>
+                      <div className="pt-2"><button onClick={handleAddOrUpdateIngredient} className="w-full py-2 bg-blue-600 text-white rounded-lg font-bold hover:bg-blue-700">{editIngId ? 'Update Ingredient' : 'Add Ingredient'}</button></div>
+                  </div>
+              </div>
+          </div>
+      )}
+
+      {/* Bill Verification Modal */}
+      {showBillModal && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm animate-in fade-in">
+              <div className="bg-white rounded-2xl shadow-xl w-full max-w-5xl h-[85vh] flex flex-col m-4 overflow-hidden">
+                  <div className="p-4 border-b border-slate-200 flex justify-between items-center bg-slate-50">
+                      <h3 className="text-xl font-bold text-slate-800 flex items-center gap-2">
+                          <FileUp size={24} className="text-blue-600" /> Bill Verification
+                      </h3>
+                      <button onClick={() => { setShowBillModal(false); setBillFile(null); }} className="text-slate-400 hover:text-slate-600"><X size={24} /></button>
+                  </div>
+                  
+                  <div className="flex-1 flex overflow-hidden">
+                      {/* Left: Image Preview */}
+                      <div className="w-1/2 bg-slate-900 flex items-center justify-center p-4 relative">
+                          {billFile ? (
+                              <img src={billFile} alt="Bill Preview" className="max-w-full max-h-full object-contain rounded shadow-lg" />
+                          ) : (
+                              <ImageIcon size={48} className="text-slate-700" />
+                          )}
+                          {isProcessingBill && (
+                              <div className="absolute inset-0 bg-black/60 flex flex-col items-center justify-center text-white backdrop-blur-sm">
+                                  <Loader2 size={48} className="animate-spin mb-4 text-blue-400" />
+                                  <p className="text-lg font-medium">Analyzing Bill...</p>
+                                  <p className="text-sm text-slate-300">Extracting items & prices</p>
+                              </div>
+                          )}
+                      </div>
+
+                      {/* Right: Detected Items List */}
+                      <div className="w-1/2 p-6 flex flex-col bg-white overflow-y-auto">
+                          <h4 className="font-bold text-slate-700 mb-4 flex items-center gap-2">
+                              <Sparkles size={18} className="text-purple-500" /> Detected Items
+                          </h4>
+                          
+                          {detectedBillItems.length > 0 ? (
+                              <div className="flex-1 space-y-3">
+                                  {detectedBillItems.map((item, idx) => (
+                                      <div key={idx} className="flex gap-3 items-start p-3 border border-slate-200 rounded-lg hover:border-blue-300 transition-colors">
+                                          <div className="flex-1 space-y-2">
+                                              <input 
+                                                className="w-full font-bold text-slate-800 border-b border-transparent hover:border-slate-300 focus:border-blue-500 outline-none bg-transparent"
+                                                value={item.name}
+                                                onChange={(e) => {
+                                                    const newItems = [...detectedBillItems];
+                                                    newItems[idx].name = e.target.value;
+                                                    setDetectedBillItems(newItems);
+                                                }}
+                                              />
+                                              <div className="flex gap-2">
+                                                  <input 
+                                                    className="w-20 text-xs bg-slate-50 border rounded px-1"
+                                                    value={item.stockQuantity}
+                                                    type="number"
+                                                    onChange={(e) => {
+                                                        const newItems = [...detectedBillItems];
+                                                        newItems[idx].stockQuantity = parseFloat(e.target.value);
+                                                        setDetectedBillItems(newItems);
+                                                    }}
+                                                  />
+                                                  <span className="text-xs text-slate-500 pt-1">{item.unit}</span>
+                                              </div>
+                                          </div>
+                                          <div className="text-right">
+                                               <div className="flex items-center justify-end gap-1">
+                                                   <span className="text-xs text-slate-400">₹</span>
+                                                   <input 
+                                                        className="w-20 text-right font-mono font-medium border-b border-transparent hover:border-slate-300 focus:border-blue-500 outline-none"
+                                                        value={item.unitCost}
+                                                        type="number"
+                                                        onChange={(e) => {
+                                                            const newItems = [...detectedBillItems];
+                                                            newItems[idx].unitCost = parseFloat(e.target.value);
+                                                            setDetectedBillItems(newItems);
+                                                        }}
+                                                   />
+                                               </div>
+                                               {item.id ? (
+                                                   <span className="text-[10px] text-green-600 bg-green-50 px-2 py-0.5 rounded-full mt-1 inline-block">Matched</span>
+                                               ) : (
+                                                   <span className="text-[10px] text-blue-600 bg-blue-50 px-2 py-0.5 rounded-full mt-1 inline-block">New Item</span>
+                                               )}
+                                          </div>
+                                          <button 
+                                            onClick={() => setDetectedBillItems(detectedBillItems.filter((_, i) => i !== idx))}
+                                            className="text-slate-300 hover:text-red-500"
+                                          >
+                                              <X size={16} />
+                                          </button>
+                                      </div>
+                                  ))}
+                              </div>
+                          ) : (
+                              <div className="flex-1 flex flex-col items-center justify-center text-slate-400 border-2 border-dashed border-slate-100 rounded-xl">
+                                  <p>No items detected yet.</p>
+                              </div>
+                          )}
+
+                          <div className="mt-6 pt-4 border-t border-slate-100 flex justify-end gap-3">
+                              <button onClick={() => setShowBillModal(false)} className="px-4 py-2 text-slate-600 hover:bg-slate-100 rounded-lg font-medium">Cancel</button>
+                              <button 
+                                onClick={handleConfirmBillUpdate}
+                                disabled={detectedBillItems.length === 0}
+                                className="px-6 py-2 bg-blue-600 text-white rounded-lg font-bold hover:bg-blue-700 shadow-lg disabled:opacity-50 disabled:cursor-not-allowed"
+                              >
+                                  Confirm & Update Inventory
+                              </button>
+                          </div>
+                      </div>
                   </div>
               </div>
           </div>

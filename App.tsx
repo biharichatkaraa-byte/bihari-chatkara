@@ -9,9 +9,11 @@ import StaffManagement from './components/StaffManagement';
 import Expenses from './components/Expenses';
 import Procurement from './components/Procurement';
 import Customers from './components/Customers';
+import Settings from './components/Settings';
+import OrderHistory from './components/OrderHistory';
 import Login from './components/Login';
-import { Order, OrderStatus, User, UserRole, Ingredient, Expense, RequisitionRequest, RequisitionStatus, MenuItem, Customer, PaymentMethod, PaymentStatus } from './types';
-import { Menu, Wifi, WifiOff } from 'lucide-react';
+import { Order, OrderStatus, User, UserRole, Ingredient, Expense, RequisitionRequest, RequisitionStatus, MenuItem, Customer, PaymentMethod, PaymentStatus, LineItem } from './types';
+import { Menu, Wifi, WifiOff, RefreshCw } from 'lucide-react';
 import * as db from './services/db';
 import { APP_DATA_VERSION } from './constants';
 
@@ -27,6 +29,7 @@ const App: React.FC = () => {
   
   // Track connection triggers to re-run subscriptions
   const [connectionTrigger, setConnectionTrigger] = useState(0);
+  const [isRefreshing, setIsRefreshing] = useState(false);
 
   // --- DATA STATE ---
   const [orders, setOrders] = useState<Order[]>([]);
@@ -36,6 +39,23 @@ const App: React.FC = () => {
   const [expenses, setExpenses] = useState<Expense[]>([]);
   const [requisitions, setRequisitions] = useState<RequisitionRequest[]>([]);
   const [customers, setCustomers] = useState<Customer[]>([]);
+
+  // --- ORIENTATION LOCK ---
+  useEffect(() => {
+    const lockOrientation = async () => {
+      try {
+        // @ts-ignore
+        if (window.screen?.orientation?.lock) {
+          // @ts-ignore
+          await window.screen.orientation.lock('portrait');
+        }
+      } catch (e) {
+        // Orientation lock might fail on desktop or incompatible browsers, which is expected.
+        console.debug("Screen orientation lock skipped or not supported.");
+      }
+    };
+    lockOrientation();
+  }, []);
 
   // --- REAL-TIME SUBSCRIPTIONS ---
   useEffect(() => {
@@ -53,6 +73,11 @@ const App: React.FC = () => {
     const unsubExp = db.subscribeToCollection('expenses', setExpenses, []);
     const unsubReq = db.subscribeToCollection('requisitions', setRequisitions, []);
     const unsubCust = db.subscribeToCollection('customers', setCustomers, []);
+
+    // Stop refreshing spinner if it was running
+    if (isRefreshing) {
+        setTimeout(() => setIsRefreshing(false), 500);
+    }
 
     return () => {
         unsubOrders(); unsubMenu(); unsubIng(); unsubUsers(); unsubExp(); unsubReq(); unsubCust();
@@ -83,6 +108,11 @@ const App: React.FC = () => {
     setIsSidebarOpen(false);
   };
 
+  const handleManualRefresh = () => {
+      setIsRefreshing(true);
+      setConnectionTrigger(prev => prev + 1);
+  };
+
   // Check for existing session
   useEffect(() => {
       const savedUser = localStorage.getItem('rms_user');
@@ -95,13 +125,143 @@ const App: React.FC = () => {
       }
   }, []);
 
+  // --- INVENTORY SYNC HELPER ---
+  const syncInventory = (itemsToProcess: { menuItemId: string; quantity: number; portion?: string }[], mode: 'deduct' | 'restore' = 'deduct') => {
+      if (itemsToProcess.length === 0) return;
+
+      const updates = new Map<string, number>(); // IngredientID -> Amount Change
+
+      itemsToProcess.forEach(item => {
+          const menuItem = menuItems.find(m => m.id === item.menuItemId);
+          if (!menuItem) return;
+
+          // Determine portion multiplier
+          let ratio = 1.0;
+          if (item.portion === 'Half') ratio = 0.5;
+          if (item.portion === 'Quarter') ratio = 0.25;
+
+          // STRATEGY 1: EXPLICIT RECIPE (High Priority)
+          // If the menu item has linked ingredients, use ONLY those.
+          if (menuItem.ingredients && menuItem.ingredients.length > 0) {
+              menuItem.ingredients.forEach(ingRef => {
+                  const amount = ingRef.quantity * item.quantity * ratio;
+                  updates.set(ingRef.ingredientId, (updates.get(ingRef.ingredientId) || 0) + amount);
+              });
+          } 
+          // STRATEGY 2: UNIVERSAL NAME MATCHING (Fallback)
+          // If no recipe is defined, look for ingredients that match the menu item's name.
+          else {
+              const matchableName = menuItem.name.toLowerCase();
+              
+              ingredients.forEach(ing => {
+                  const ingName = ing.name.toLowerCase();
+                  
+                  // Logic: If the Menu Item Name contains the Ingredient Name (e.g. "Chilli Chicken" contains "Chicken")
+                  // Ignore very short words to prevent false positives (like "Oil" matching "Boiled")
+                  // We check boundary or length > 2
+                  if (ingName.length > 2 && matchableName.includes(ingName)) {
+                      
+                      // Determine Heuristic Quantity based on Unit for a FULL portion
+                      let defaultQty = 1;
+                      const unit = ing.unit.toLowerCase();
+                      
+                      if (['kg', 'l', 'liter', 'litre', 'kgs'].includes(unit)) {
+                          defaultQty = 0.25; // 250g/ml deduction for standard main course
+                      } else if (['g', 'gm', 'ml', 'gms'].includes(unit)) {
+                          defaultQty = 250; // 250g deduction
+                      } else if (['lb', 'pound', 'lbs'].includes(unit)) {
+                          defaultQty = 0.5; // Half pound
+                      } else if (['oz', 'ounce'].includes(unit)) {
+                          defaultQty = 8; // 8oz
+                      }
+                      
+                      const amount = defaultQty * item.quantity * ratio;
+                      updates.set(ing.id, (updates.get(ing.id) || 0) + amount);
+                  }
+              });
+          }
+      });
+
+      if (updates.size > 0) {
+          const newIngredients = ingredients.map(ing => {
+              if (updates.has(ing.id)) {
+                  const changeAmount = updates.get(ing.id)!;
+                  let newQty = ing.stockQuantity;
+                  
+                  if (mode === 'deduct') {
+                      newQty = Math.max(0, ing.stockQuantity - changeAmount);
+                  } else {
+                      newQty = ing.stockQuantity + changeAmount;
+                  }
+                  
+                  return { ...ing, stockQuantity: newQty };
+              }
+              return ing;
+          });
+          
+          setIngredients(newIngredients);
+          // Persist only changed items to DB
+          newIngredients.forEach(ing => {
+              if (updates.has(ing.id)) {
+                  db.updateItem('ingredients', ing);
+              }
+          });
+      }
+  };
+
   // POS Handlers
   const handlePlaceOrder = (order: Order) => {
     setOrders(prev => [order, ...prev]); // Optimistic
     db.addItem('orders', order);
+    
+    // Real-time Inventory Deduction on Order Placement
+    // We map LineItem to the simplified structure required by syncInventory
+    syncInventory(
+        order.items.map(i => ({ 
+            menuItemId: i.menuItemId, 
+            quantity: i.quantity, 
+            portion: i.portion 
+        })), 
+        'deduct'
+    );
   };
 
   const handleUpdateOrder = (order: Order) => {
+    // Calculate Diff for Inventory (Handle added/removed items)
+    const oldOrder = orders.find(o => o.id === order.id);
+    if (oldOrder) {
+        const toDeduct: { menuItemId: string; quantity: number; portion?: string }[] = [];
+        const toRestore: { menuItemId: string; quantity: number; portion?: string }[] = [];
+        
+        // Map old items for easy lookup
+        const oldMap = new Map<string, LineItem>();
+        oldOrder.items.forEach(i => oldMap.set(i.id, i));
+        
+        order.items.forEach(newItem => {
+            const oldItem = oldMap.get(newItem.id);
+            const oldQty = oldItem ? oldItem.quantity : 0;
+            const delta = newItem.quantity - oldQty;
+            
+            if (delta > 0) {
+                // Quantity increased -> Deduct more
+                toDeduct.push({ menuItemId: newItem.menuItemId, quantity: delta, portion: newItem.portion });
+            } else if (delta < 0) {
+                // Quantity decreased -> Restore stock
+                toRestore.push({ menuItemId: newItem.menuItemId, quantity: Math.abs(delta), portion: newItem.portion });
+            }
+            
+            oldMap.delete(newItem.id);
+        });
+        
+        // Items completely removed from order (restore to stock)
+        oldMap.forEach((oldItem) => {
+            toRestore.push({ menuItemId: oldItem.menuItemId, quantity: oldItem.quantity, portion: oldItem.portion });
+        });
+
+        syncInventory(toDeduct, 'deduct');
+        syncInventory(toRestore, 'restore');
+    }
+
     setOrders(prev => prev.map(o => o.id === order.id ? order : o)); // Optimistic
     db.updateItem('orders', order);
   };
@@ -112,6 +272,7 @@ const App: React.FC = () => {
     if (orderIndex === -1) return;
 
     const order = orders[orderIndex];
+    // NOTE: Inventory is already deducted during Place/Update order. We just mark as Paid here.
     const updatedOrder = { ...order, paymentStatus: PaymentStatus.PAID, paymentMethod: method, completedAt: new Date() };
     
     // Optimistic Update
@@ -120,27 +281,36 @@ const App: React.FC = () => {
     setOrders(newOrders);
 
     db.updateItem('orders', updatedOrder);
-
-    // Inventory Deduction
-    order.items.forEach(lineItem => {
-        const menuItem = menuItems.find(m => m.id === lineItem.menuItemId);
-        if (menuItem) {
-            menuItem.ingredients.forEach(ingRef => {
-                const ingredient = ingredients.find(i => i.id === ingRef.ingredientId);
-                if (ingredient) {
-                    const newQty = Math.max(0, ingredient.stockQuantity - (ingRef.quantity * lineItem.quantity));
-                    // Optimistic Inventory update
-                    db.updateItem('ingredients', { ...ingredient, stockQuantity: newQty });
-                }
-            });
-        }
-    });
   };
 
   // KDS Handlers
   const handleUpdateOrderStatus = (orderId: string, status: OrderStatus) => {
     const order = orders.find(o => o.id === orderId);
     if (order) {
+        // Handle Inventory Restoration on Cancellation
+        if (status === OrderStatus.CANCELLED && order.status !== OrderStatus.CANCELLED) {
+            syncInventory(
+                order.items.map(i => ({ 
+                    menuItemId: i.menuItemId, 
+                    quantity: i.quantity, 
+                    portion: i.portion 
+                })), 
+                'restore'
+            );
+        }
+        
+        // Handle Inventory Deduction if Un-Cancelling (rare, but correct logic)
+        if (order.status === OrderStatus.CANCELLED && status !== OrderStatus.CANCELLED) {
+             syncInventory(
+                order.items.map(i => ({ 
+                    menuItemId: i.menuItemId, 
+                    quantity: i.quantity, 
+                    portion: i.portion 
+                })), 
+                'deduct'
+            );
+        }
+
         let updated = { ...order, status };
         
         // If finishing the order, add completion timestamp if not already set
@@ -380,6 +550,12 @@ const App: React.FC = () => {
                 <h1 className="font-bold text-lg text-slate-800">Bihari Chatkara</h1>
             </div>
             <div className="flex items-center gap-2">
+                 <button 
+                    onClick={handleManualRefresh}
+                    className={`p-1.5 rounded-full bg-slate-100 text-slate-500 hover:bg-slate-200 ${isRefreshing ? 'animate-spin' : ''}`}
+                 >
+                     <RefreshCw size={16} />
+                 </button>
                  <div className={`p-1 rounded-full ${isLive ? 'bg-green-100 text-green-600' : 'bg-slate-100 text-slate-400'}`}>
                      {isLive ? <Wifi size={16} /> : <WifiOff size={16} />}
                  </div>
@@ -390,21 +566,31 @@ const App: React.FC = () => {
         </div>
 
         {/* Live Status Indicator (Desktop) */}
-        <div className="hidden md:flex absolute top-4 right-6 z-20 items-center gap-2 bg-white/80 backdrop-blur-sm px-3 py-1.5 rounded-full border border-slate-200 shadow-sm text-xs font-bold text-slate-600 transition-all duration-500">
-             {isLive ? (
-                 <>
-                    <span className="relative flex h-2 w-2">
-                      <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-green-400 opacity-75"></span>
-                      <span className="relative inline-flex rounded-full h-2 w-2 bg-green-500"></span>
-                    </span>
-                    Connected to Cloud
-                 </>
-             ) : (
-                 <>
-                    <WifiOff size={12} className="text-slate-400" />
-                    Local Mode
-                 </>
-             )}
+        <div className="hidden md:flex absolute top-4 right-6 z-20 items-center gap-2">
+            <button 
+                onClick={handleManualRefresh}
+                className="bg-white/80 backdrop-blur-sm p-1.5 rounded-full border border-slate-200 shadow-sm text-slate-500 hover:text-blue-600 transition-colors"
+                title="Refresh Data"
+            >
+                <RefreshCw size={14} className={isRefreshing ? 'animate-spin' : ''} />
+            </button>
+            
+            <div className="flex items-center gap-2 bg-white/80 backdrop-blur-sm px-3 py-1.5 rounded-full border border-slate-200 shadow-sm text-xs font-bold text-slate-600 transition-all duration-500">
+                {isLive ? (
+                    <>
+                        <span className="relative flex h-2 w-2">
+                        <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-green-400 opacity-75"></span>
+                        <span className="relative inline-flex rounded-full h-2 w-2 bg-green-500"></span>
+                        </span>
+                        Connected to Cloud
+                    </>
+                ) : (
+                    <>
+                        <WifiOff size={12} className="text-slate-400" />
+                        Local Mode
+                    </>
+                )}
+            </div>
         </div>
 
         <div className="flex-1 overflow-auto p-4 md:p-6 pb-24">
@@ -419,6 +605,10 @@ const App: React.FC = () => {
             />
           )}
           
+          {activeTab === 'history' && (
+            <OrderHistory orders={orders} />
+          )}
+
           {activeTab === 'pos' && (
             <POS 
                 orders={orders} 
@@ -447,6 +637,7 @@ const App: React.FC = () => {
                 menuItems={menuItems}
                 onSave={handleUpdateInventory}
                 onDeleteIngredient={handleDeleteIngredient}
+                onAddIngredient={handleAddIngredient}
                 onAddMenuItem={handleAddMenuItem}
                 onUpdateMenuItem={handleUpdateMenuItem}
                 onDeleteMenuItem={handleDeleteMenuItem}
@@ -493,6 +684,10 @@ const App: React.FC = () => {
                   onAddCustomer={handleAddCustomer}
                   onDeleteCustomer={handleDeleteCustomer}
               />
+          )}
+
+          {activeTab === 'settings' && (
+              <Settings />
           )}
         </div>
       </main>

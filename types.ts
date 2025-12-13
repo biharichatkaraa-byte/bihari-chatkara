@@ -17,6 +17,7 @@ export enum PaymentStatus {
 export enum PaymentMethod {
   CASH = 'CASH',
   ONLINE = 'ONLINE',
+  PAYTM_POS = 'PAYTM_POS',
 }
 
 export enum UserRole {
@@ -56,6 +57,7 @@ export interface Ingredient {
   unit: string;
   unitCost: number; // Cost per unit
   stockQuantity: number;
+  barcode?: string; // New field for scanning
 }
 
 export interface MenuItemIngredient {
@@ -123,6 +125,7 @@ export interface Expense {
   category: string;
   date: Date;
   reportedBy: string;
+  receiptImage?: string; // Base64 encoded image string
 }
 
 export interface RequisitionRequest {

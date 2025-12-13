@@ -3,10 +3,16 @@
 
 A comprehensive, cloud-ready Restaurant Management System built with React, Vite, Express, and MySQL. This application handles Point of Sale (POS), Kitchen Display Systems (KDS), Inventory Management, Staff Roles, and Procurement.
 
+![License](https://img.shields.io/badge/license-MIT-blue.svg)
+![React](https://img.shields.io/badge/React-18-blue)
+![Vite](https://img.shields.io/badge/Vite-5-purple)
+![Tailwind](https://img.shields.io/badge/Tailwind-3-cyan)
+
 ## Features
 
 *   **Point of Sale (POS)**: Table management, quick ordering, custom items, and bill printing.
 *   **Kitchen Display System (KDS)**: Real-time order ticking, color-coded urgency, and "Chef AI" recipe assistance.
+*   **Advanced Order History**: Detailed transaction logs with filtering by Date, Time, Payment Method (Cash/Card/UPI), and Status.
 *   **Inventory**: Ingredient tracking, menu cost analysis, and low-stock alerts.
 *   **Procurement**: Purchase requisition workflow (Chef request -> Manager approve -> Purchase Order).
 *   **Expenses**: Operational cost tracking and budgeting.
@@ -43,27 +49,46 @@ A comprehensive, cloud-ready Restaurant Management System built with React, Vite
 3.  (Optional) Set up Environment Variables:
     Copy `.env.example` to `.env` and fill in your database credentials if running the backend.
     ```bash
-    # Example .env content
-    DB_HOST=127.0.0.1
-    DB_USER=root
-    DB_PASSWORD=your_password
-    DB_NAME=chatkara
-    PORT=8080
+    cp .env.example .env
     ```
 
 ### Running Locally (Development)
 
-Run the frontend development server:
+1.  **Frontend Only (Demo Mode)**:
+    Runs the React app with LocalStorage (no database required).
+    ```bash
+    npm run dev
+    ```
+    Open [http://localhost:3000](http://localhost:3000).
+
+2.  **Full Stack (Frontend + Backend)**:
+    Ensure your MySQL server is running and credentials are in `.env`.
+    
+    *Terminal 1 (Backend):*
+    ```bash
+    npm start
+    ```
+    
+    *Terminal 2 (Frontend):*
+    ```bash
+    npm run dev
+    ```
+
+### Building for Production
+
+To create a production build (outputs to `dist/`):
 
 ```bash
-npm run dev
+npm run build
 ```
 
-Run the backend server (optional, required for MySQL features):
+## Project Structure
 
-```bash
-npm start
-```
+*   `/components` - React UI components (POS, KDS, Dashboard, etc.)
+*   `/services` - API adapters and Logic (DB connection, AI service).
+*   `App.tsx` - Main routing and layout logic.
+*   `server.js` - Node.js Express server for MySQL connectivity.
+*   `types.ts` - TypeScript interfaces.
 
 ## Demo Credentials
 
@@ -74,15 +99,6 @@ The application comes with a **Demo Mode** enabled by default. Click the role bu
 | **Admin** | `admin@biharichatkara.com` | `admin123` |
 | **Chef** | `chef@biharichatkara.com` | `chef123` |
 | **Staff** | `server@biharichatkara.com` | `server123` |
-
-## Deployment
-
-1.  Build the frontend:
-    ```bash
-    npm run build
-    ```
-
-2.  Deploy the `dist/` folder to your static host, or run `node server.js` to serve both API and Static files in a production environment (e.g., Google App Engine, Heroku).
 
 ## License
 

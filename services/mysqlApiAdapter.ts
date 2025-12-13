@@ -1,12 +1,10 @@
 
 /**
- * DEPRECATED
+ * DEPRECATED FILE
  * 
- * This file was a reference implementation for the API Adapter pattern.
- * The active database logic is now located in `services/db.ts` which handles
- * both the LocalStorage fallback and the API calls to `server.js`.
+ * This file is no longer used in the application.
+ * You can safely delete this file from your repository.
  * 
- * You can safely ignore or delete this file.
+ * Logic has been moved to services/db.ts
  */
-
 export const mysqlApi = {};

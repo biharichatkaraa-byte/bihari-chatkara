@@ -11,6 +11,16 @@
 // [OPTIONAL] Paste your Cloud Run / App Engine URL here to force a default connection
 export const DEFAULT_CLOUD_URL = ""; 
 
+// Internal Seed Data for Local Mode (matches server.js seeding)
+const SEED_LOCAL_ADMIN = { 
+  id: 'u1', 
+  name: 'Administrator', 
+  email: 'admin@biharichatkara.com', 
+  role: 'Manager', 
+  password: 'admin123',
+  permissions: [] 
+};
+
 // --- HELPERS ---
 const sanitizeUrl = (url: string) => {
     let clean = url.trim().replace(/\/+$/, "");
@@ -37,6 +47,8 @@ if (storedUrl) {
 
 let API_BASE_URL: string | null = storedUrl || (DEFAULT_CLOUD_URL ? DEFAULT_CLOUD_URL : null);
 let isLive = false; 
+// WRITE LOCK: Prevents polling from overwriting optimistic UI updates while a write is in flight
+let activeWriteCount = 0; 
 
 export const isDatabaseLive = () => isLive;
 
@@ -224,7 +236,15 @@ export const loginUser = async (email: string, password: string): Promise<{ succ
     } else {
         // Local Mode Fallback (Offline)
         const saved = localStorage.getItem('rms_users');
-        const users = saved ? JSON.parse(saved) : [];
+        
+        // Safety check: ensure admin user exists in local storage
+        let users = saved ? JSON.parse(saved) : [];
+        if (users.length === 0) {
+            console.log("[DB] Seeding Local Admin for Auth");
+            users = [SEED_LOCAL_ADMIN];
+            localStorage.setItem('rms_users', JSON.stringify(users));
+        }
+
         const user = users.find((u: any) => u.email.toLowerCase() === email.toLowerCase() && u.password === password);
         if (user) return { success: true, user };
         return { success: false, error: 'Invalid credentials (Local Mode)' };
@@ -245,6 +265,13 @@ export const subscribeToCollection = (
     
     const fetchData = async () => {
         if (!isSubscribed) return;
+        
+        // CRITICAL: Skip polling if a write operation is currently in progress.
+        // This prevents the optimistic UI state from being overwritten by stale server data.
+        if (activeWriteCount > 0) {
+            return; 
+        }
+
         try {
             const url = getUrl(endpoint);
             const res = await fetch(url, { mode: 'cors' });
@@ -261,8 +288,32 @@ export const subscribeToCollection = (
     };
 
     fetchData(); // Initial Fetch
-    const intervalId = setInterval(fetchData, 4000); // Poll every 4s
-    return () => { isSubscribed = false; clearInterval(intervalId); };
+    
+    // 1. High Frequency Polling (1s)
+    const intervalId = setInterval(fetchData, 1000); 
+
+    // 2. Fetch on Window Focus (Instant update when switching back to tab)
+    const handleFocus = () => {
+        if (isSubscribed) fetchData();
+    };
+    window.addEventListener('focus', handleFocus);
+
+    // 3. Force Refresh Event Listener (Triggered by mutations)
+    const handleForceRefresh = (e: Event) => {
+        const ce = e as CustomEvent;
+        if (ce.detail && (ce.detail.colName === colName || ce.detail.colName === 'all')) {
+            // Minimal delay to allow server write propagation
+            setTimeout(fetchData, 50);
+        }
+    };
+    window.addEventListener('rms-force-refresh', handleForceRefresh);
+
+    return () => { 
+        isSubscribed = false; 
+        clearInterval(intervalId); 
+        window.removeEventListener('focus', handleFocus);
+        window.removeEventListener('rms-force-refresh', handleForceRefresh);
+    };
 
   } else {
     // Local Storage Mode
@@ -291,8 +342,13 @@ export const subscribeToCollection = (
   }
 };
 
+const triggerForceRefresh = (colName: CollectionName) => {
+    window.dispatchEvent(new CustomEvent('rms-force-refresh', { detail: { colName } }));
+};
+
 export const addItem = async (colName: CollectionName, item: any) => {
   if (isLive) {
+    activeWriteCount++;
     try {
         const endpoint = ENDPOINTS[colName];
         await fetch(getUrl(endpoint), {
@@ -301,7 +357,12 @@ export const addItem = async (colName: CollectionName, item: any) => {
             body: JSON.stringify(item),
             mode: 'cors'
         });
-    } catch (e) { console.error("[API] Add Error", e); }
+        triggerForceRefresh(colName);
+    } catch (e) { 
+        console.error("[API] Add Error", e); 
+    } finally {
+        activeWriteCount--;
+    }
   } else {
     saveToLocal(colName, item, 'add');
   }
@@ -309,6 +370,7 @@ export const addItem = async (colName: CollectionName, item: any) => {
 
 export const updateItem = async (colName: CollectionName, item: any) => {
   if (isLive) {
+    activeWriteCount++;
     try {
         const endpoint = ENDPOINTS[colName];
         await fetch(getUrl(`${endpoint}/${item.id}`), {
@@ -317,7 +379,12 @@ export const updateItem = async (colName: CollectionName, item: any) => {
             body: JSON.stringify(item),
             mode: 'cors'
         });
-    } catch (e) { console.error("[API] Update Error", e); }
+        triggerForceRefresh(colName);
+    } catch (e) { 
+        console.error("[API] Update Error", e); 
+    } finally {
+        activeWriteCount--;
+    }
   } else {
     saveToLocal(colName, item, 'update');
   }
@@ -325,19 +392,25 @@ export const updateItem = async (colName: CollectionName, item: any) => {
 
 export const deleteItem = async (colName: CollectionName, itemId: string) => {
   if (isLive) {
+    activeWriteCount++;
     try {
         const endpoint = ENDPOINTS[colName];
         await fetch(getUrl(`${endpoint}/${itemId}`), {
             method: 'DELETE',
             mode: 'cors'
         });
-    } catch (e) { console.error("[API] Delete Error", e); }
+        triggerForceRefresh(colName);
+    } catch (e) { 
+        console.error("[API] Delete Error", e); 
+    } finally {
+        activeWriteCount--;
+    }
   } else {
     saveToLocal(colName, { id: itemId }, 'delete');
   }
 };
 
-// Bulk operations (Currently local-only optimizations, simplified for API)
+// Bulk operations
 export const bulkUpdateItems = async (colName: CollectionName, items: any[]) => {
     if (!isLive) {
         const key = `rms_${colName}`;
@@ -349,8 +422,13 @@ export const bulkUpdateItems = async (colName: CollectionName, items: any[]) => 
         localStorage.setItem(key, JSON.stringify(current));
         window.dispatchEvent(new CustomEvent('rms-local-update', { detail: { collection: colName } }));
     } else {
-        // Naive iteration for API
-        items.forEach(item => updateItem(colName, item));
+        activeWriteCount++;
+        try {
+            await Promise.all(items.map(item => updateItem(colName, item))); // Note: inner updateItem increments activeWriteCount too, which is fine
+            triggerForceRefresh(colName);
+        } finally {
+            activeWriteCount--;
+        }
     }
 };
 
@@ -363,7 +441,13 @@ export const bulkAddItems = async (colName: CollectionName, items: any[]) => {
         localStorage.setItem(key, JSON.stringify(current));
         window.dispatchEvent(new CustomEvent('rms-local-update', { detail: { collection: colName } }));
     } else {
-        items.forEach(item => addItem(colName, item));
+        activeWriteCount++;
+        try {
+            await Promise.all(items.map(item => addItem(colName, item)));
+            triggerForceRefresh(colName);
+        } finally {
+            activeWriteCount--;
+        }
     }
 };
 
@@ -376,19 +460,35 @@ export const bulkDeleteItems = async (colName: CollectionName, ids: string[]) =>
         localStorage.setItem(key, JSON.stringify(current));
         window.dispatchEvent(new CustomEvent('rms-local-update', { detail: { collection: colName } }));
     } else {
-        ids.forEach(id => deleteItem(colName, id));
+        activeWriteCount++;
+        try {
+            await Promise.all(ids.map(id => deleteItem(colName, id)));
+            triggerForceRefresh(colName);
+        } finally {
+            activeWriteCount--;
+        }
     }
 };
 
 const hydrateDates = (obj: any): any => {
     if (!obj) return obj;
     const newObj = { ...obj };
+    const map = {
+        'receipt_image': 'receiptImage'
+    };
     for (const key in newObj) {
+        // Hydrate Dates
         if (
             (key.endsWith('At') || key === 'date' || key === 'lastVisit' || key === 'startTime' || key === 'endTime') && 
             typeof newObj[key] === 'string'
         ) {
             newObj[key] = new Date(newObj[key]);
+        }
+        
+        // Hydrate snake_case fields if they slipped through
+        if (map[key as keyof typeof map]) {
+             newObj[map[key as keyof typeof map]] = newObj[key];
+             delete newObj[key];
         }
     }
     return newObj;
@@ -406,6 +506,13 @@ const loadFromLocal = (colName: string, callback: (data: any[]) => void, fallbac
       });
       callback(parsed);
     } else {
+      if (colName === 'users' && (!fallbackData || fallbackData.length === 0)) {
+          console.log("[DB] Seeding Local Storage with Default Admin");
+          const seededData = [SEED_LOCAL_ADMIN];
+          localStorage.setItem(`rms_${colName}`, JSON.stringify(seededData));
+          callback(seededData);
+          return;
+      }
       localStorage.setItem(`rms_${colName}`, JSON.stringify(fallbackData));
       callback(fallbackData);
     }

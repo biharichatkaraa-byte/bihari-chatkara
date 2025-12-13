@@ -1,0 +1,87 @@
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  body {
+    font-family: 'Inter', sans-serif;
+    background-color: #f3f4f6;
+    overscroll-behavior-y: none; /* Prevents pull-to-refresh on mobile */
+  }
+}
+
+@layer utilities {
+  .font-serif {
+    font-family: 'Playfair Display', serif;
+  }
+  
+  /* Custom scrollbar for KDS/POS panels */
+  .no-scrollbar::-webkit-scrollbar {
+    display: none;
+  }
+  .no-scrollbar {
+    -ms-overflow-style: none;
+    scrollbar-width: none;
+  }
+
+  .pb-safe-area {
+    padding-bottom: env(safe-area-inset-bottom);
+  }
+}
+
+@keyframes flash-red {
+  0%, 100% { background-color: #fef2f2; border-color: #ef4444; box-shadow: 0 0 0 0 rgba(239, 68, 68, 0); }
+  50% { background-color: #fee2e2; border-color: #b91c1c; box-shadow: 0 0 0 4px rgba(239, 68, 68, 0.2); }
+}
+.animate-flash-red {
+  animation: flash-red 1s 5;
+}
+
+/* Production Print Styles for Thermal Receipts */
+@media print {
+  @page {
+    margin: 0;
+    size: auto;
+  }
+  body, html {
+    background-color: white !important;
+    height: 100%;
+    width: 100%;
+    overflow: hidden;
+  }
+  body * {
+    visibility: hidden;
+    height: 0;
+  }
+  #printable-receipt, #printable-receipt * {
+    visibility: visible;
+    height: auto;
+  }
+  #printable-receipt {
+    position: fixed;
+    left: 0;
+    top: 0;
+    width: 100% !important; /* Forces modal content to take full width of paper */
+    max-width: 80mm; /* Standard thermal width approx */
+    margin: 0;
+    padding: 10px;
+    box-shadow: none !important;
+    border: none !important;
+    background: white !important;
+    color: black !important;
+    font-family: 'Courier New', Courier, monospace; /* Monospace aligns prices better */
+  }
+  .print-hidden {
+    display: none !important;
+  }
+  /* Improve contrast for thermal printing */
+  .text-slate-500, .text-slate-400, .text-slate-600 {
+    color: black !important;
+  }
+  .bg-slate-900 {
+    background: none !important;
+    color: black !important;
+    border: 1px solid black;
+  }
+}

@@ -17,7 +17,7 @@ const AVAILABLE_MODULES = [
     { id: 'procurement', label: 'Procurement' },
     { id: 'expenses', label: 'Expenses' },
     { id: 'customers', label: 'Customer Mgmt' },
-    { id: 'staff', label: 'Staff Access' },
+    { id: 'staff', label: 'User Access' },
 ];
 
 const StaffManagement: React.FC<StaffManagementProps> = ({ users, onAddUser, onDeleteUser }) => {
@@ -70,20 +70,20 @@ const StaffManagement: React.FC<StaffManagementProps> = ({ users, onAddUser, onD
     <div className="h-full flex flex-col space-y-6">
       <div className="flex justify-between items-center">
         <div>
-          <h2 className="text-2xl font-bold text-slate-800">Staff Management</h2>
+          <h2 className="text-2xl font-bold text-slate-800">User Management</h2>
           <p className="text-slate-500">Manage user access levels and roles.</p>
         </div>
         <button
           onClick={() => setIsAdding(!isAdding)}
           className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg flex items-center gap-2 shadow-lg shadow-blue-200 transition-all"
         >
-          <UserPlus size={18} /> Add Staff Member
+          <UserPlus size={18} /> Add User
         </button>
       </div>
 
       {isAdding && (
         <div className="bg-white p-6 rounded-xl shadow-sm border border-slate-200 animate-in fade-in slide-in-from-top-4 duration-300">
-          <h3 className="font-bold text-lg mb-4 text-slate-800">New Staff Member Details</h3>
+          <h3 className="font-bold text-lg mb-4 text-slate-800">New User Details</h3>
           <form onSubmit={handleSubmit} className="space-y-6">
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
                 <div>
@@ -190,7 +190,7 @@ const StaffManagement: React.FC<StaffManagementProps> = ({ users, onAddUser, onD
         <table className="w-full text-left">
           <thead className="bg-slate-50 border-b border-slate-200">
             <tr>
-              <th className="px-6 py-4 font-semibold text-slate-600 text-sm">Employee</th>
+              <th className="px-6 py-4 font-semibold text-slate-600 text-sm">User</th>
               <th className="px-6 py-4 font-semibold text-slate-600 text-sm">Role / Access</th>
               <th className="px-6 py-4 font-semibold text-slate-600 text-sm">Credentials</th>
               <th className="px-6 py-4 font-semibold text-slate-600 text-sm">Status</th>
