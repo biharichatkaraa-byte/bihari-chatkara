@@ -272,7 +272,7 @@ const POS: React.FC<POSProps> = ({ orders, menuItems, onPlaceOrder, onUpdateOrde
 
   const getOrderTotal = (order: Order) => {
       const subtotal = order.items.reduce((acc, item) => {
-          let price = Number(item.priceAtOrder) || 0;
+          let price = parseFloat(item.priceAtOrder as any) || 0;
           // Robust Fallback: If price is 0, try to find it in the menu
           if (price === 0) {
               const menuPrice = menuItems.find(m => m.id === item.menuItemId)?.price;
@@ -290,7 +290,7 @@ const POS: React.FC<POSProps> = ({ orders, menuItems, onPlaceOrder, onUpdateOrde
   // UPDATED: Now preserves custom items' prices if they exist, and handles 0 values gracefully.
   const repairItems = (items: LineItem[]): LineItem[] => {
       return items.map(item => {
-          const currentPrice = Number(item.priceAtOrder) || 0;
+          const currentPrice = parseFloat(item.priceAtOrder as any) || 0;
           
           // Only attempt repair if price is 0 AND it's a known menu item (not custom)
           if (currentPrice === 0 && item.menuItemId && !item.menuItemId.startsWith('custom-')) {
