@@ -150,7 +150,7 @@ export const checkHealth = async (baseUrl: string | null = API_BASE_URL): Promis
         const controller = new AbortController();
         const timeoutId = setTimeout(() => controller.abort(), 8000); // 8s Timeout
         
-        console.log(`[DB] Pinging: ${fullUrl}`);
+        console.debug(`[DB] Pinging: ${fullUrl}`);
         const response = await fetch(fullUrl, { 
             method: 'GET',
             headers: { 'Accept': 'application/json' },
@@ -164,14 +164,14 @@ export const checkHealth = async (baseUrl: string | null = API_BASE_URL): Promis
             return { ok: true, message: "Connected" };
         } else if (response.status === 404) {
             // If 404, try next endpoint in loop
-            console.warn(`[DB] 404 on ${fullUrl}, trying next...`);
+            console.debug(`[DB] 404 on ${fullUrl}, trying next...`);
             continue;
         } else {
             return { ok: false, message: `Server Error: ${response.status}`, lastUrl: fullUrl };
         }
       } catch (e: any) {
         // Network error usually means hostname is wrong or CORS blocked
-        console.warn(`[DB] Error on ${fullUrl}: ${e.message}`);
+        console.debug(`[DB] Error on ${fullUrl}: ${e.message}`);
         // If we exhausted all endpoints, return this error
         if (path === endpoints[endpoints.length - 1]) {
              return { ok: false, message: `Network Error: ${e.message}`, lastUrl: fullUrl };
