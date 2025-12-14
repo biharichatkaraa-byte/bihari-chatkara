@@ -273,10 +273,24 @@ const POS: React.FC<POSProps> = ({ orders, menuItems, onPlaceOrder, onUpdateOrde
   const getOrderTotal = (order: Order) => {
       const subtotal = order.items.reduce((acc, item) => {
           let price = parseFloat(item.priceAtOrder as any) || 0;
+          
           // Robust Fallback: If price is 0, try to find it in the menu
-          if (price === 0) {
-              const menuPrice = menuItems.find(m => m.id === item.menuItemId)?.price;
-              if (menuPrice) price = menuPrice;
+          // Smartly check portions too
+          if (price === 0 && item.menuItemId) {
+              const menuItem = menuItems.find(m => m.id === item.menuItemId);
+              if (menuItem) {
+                  // If portions exist, try to match portion
+                  if (item.portion && menuItem.portionPrices) {
+                      const pKey = item.portion.toLowerCase() as keyof typeof menuItem.portionPrices;
+                      if (menuItem.portionPrices[pKey] && menuItem.portionPrices[pKey]! > 0) {
+                          price = menuItem.portionPrices[pKey]!;
+                      }
+                  }
+                  // Fallback to base price if portion lookup failed or didn't exist
+                  if (price === 0 && menuItem.price > 0) {
+                      price = menuItem.price;
+                  }
+              }
           }
           return acc + (price * item.quantity);
       }, 0);
@@ -287,22 +301,31 @@ const POS: React.FC<POSProps> = ({ orders, menuItems, onPlaceOrder, onUpdateOrde
   };
 
   // Helper to repair items with 0 price from menu
-  // UPDATED: Now preserves custom items' prices if they exist, and handles 0 values gracefully.
   const repairItems = (items: LineItem[]): LineItem[] => {
       return items.map(item => {
           const currentPrice = parseFloat(item.priceAtOrder as any) || 0;
           
-          // Only attempt repair if price is 0 AND it's a known menu item (not custom)
           if (currentPrice === 0 && item.menuItemId && !item.menuItemId.startsWith('custom-')) {
-              // Try to find price in menu
               const menuItem = menuItems.find(m => m.id === item.menuItemId);
-              if (menuItem && menuItem.price > 0) {
-                  // Attempt to guess portion price if it's a portion
-                  let restoredPrice = menuItem.price;
-                  if (item.portion === 'Half' && menuItem.portionPrices?.half) restoredPrice = menuItem.portionPrices.half;
-                  if (item.portion === 'Quarter' && menuItem.portionPrices?.quarter) restoredPrice = menuItem.portionPrices.quarter;
+              if (menuItem) {
+                  let restoredPrice = 0;
                   
-                  return { ...item, priceAtOrder: restoredPrice };
+                  // Attempt to guess portion price if it's a portion
+                  if (item.portion && menuItem.portionPrices) {
+                      const pKey = item.portion.toLowerCase() as keyof typeof menuItem.portionPrices;
+                      if (menuItem.portionPrices[pKey]) {
+                          restoredPrice = menuItem.portionPrices[pKey]!;
+                      }
+                  }
+                  
+                  // Fallback to base price if portions didn't match or price is still 0
+                  if (restoredPrice === 0 && menuItem.price > 0) {
+                      restoredPrice = menuItem.price;
+                  }
+                  
+                  if (restoredPrice > 0) {
+                      return { ...item, priceAtOrder: restoredPrice };
+                  }
               }
           }
           return item;
@@ -986,7 +1009,15 @@ const POS: React.FC<POSProps> = ({ orders, menuItems, onPlaceOrder, onUpdateOrde
                            let price = Number(item.priceAtOrder) || 0;
                            if (price === 0 && menuItems) {
                                const menuItem = menuItems.find(m => m.id === item.menuItemId);
-                               if (menuItem) price = menuItem.price;
+                               if (menuItem) {
+                                   // Try portion price
+                                   if (item.portion && menuItem.portionPrices) {
+                                       const pKey = item.portion.toLowerCase() as keyof typeof menuItem.portionPrices;
+                                       if (menuItem.portionPrices[pKey]) price = menuItem.portionPrices[pKey]!;
+                                   }
+                                   // Fallback to base
+                                   if (price === 0) price = menuItem.price;
+                               }
                            }
 
                            return (
@@ -1004,7 +1035,13 @@ const POS: React.FC<POSProps> = ({ orders, menuItems, onPlaceOrder, onUpdateOrde
                           let price = Number(i.priceAtOrder) || 0;
                           if (price === 0 && menuItems) {
                               const menuItem = menuItems.find(m => m.id === i.menuItemId);
-                              if (menuItem) price = menuItem.price;
+                              if (menuItem) {
+                                   if (i.portion && menuItem.portionPrices) {
+                                       const pKey = i.portion.toLowerCase() as keyof typeof menuItem.portionPrices;
+                                       if (menuItem.portionPrices[pKey]) price = menuItem.portionPrices[pKey]!;
+                                   }
+                                   if (price === 0) price = menuItem.price;
+                              }
                           }
                           return acc + (price * i.quantity);
                       }, 0).toFixed(2)}</span></div>
@@ -1013,7 +1050,13 @@ const POS: React.FC<POSProps> = ({ orders, menuItems, onPlaceOrder, onUpdateOrde
                           let price = Number(i.priceAtOrder) || 0;
                           if (price === 0 && menuItems) {
                               const menuItem = menuItems.find(m => m.id === i.menuItemId);
-                              if (menuItem) price = menuItem.price;
+                              if (menuItem) {
+                                   if (i.portion && menuItem.portionPrices) {
+                                       const pKey = i.portion.toLowerCase() as keyof typeof menuItem.portionPrices;
+                                       if (menuItem.portionPrices[pKey]) price = menuItem.portionPrices[pKey]!;
+                                   }
+                                   if (price === 0) price = menuItem.price;
+                              }
                           }
                           return a+(price*i.quantity);
                       },0) - (printOrder.discount||0)))).toFixed(2)}</span></div>
