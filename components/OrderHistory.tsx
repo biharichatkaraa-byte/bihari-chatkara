@@ -6,7 +6,7 @@ import {
     Search, Download, ChevronLeft, ChevronRight, 
     ArrowUpDown, ArrowUp, ArrowDown, Eye, FileText, 
     CheckCircle, XCircle, Clock, 
-    User, Hash, X, ArrowRight, Filter
+    User, Hash, X, ArrowRight, Filter, MessageSquare, Tag, Info, Receipt
 } from 'lucide-react';
 
 interface OrderHistoryProps {
@@ -498,109 +498,140 @@ const OrderHistory: React.FC<OrderHistoryProps> = ({ orders }) => {
             )}
         </div>
 
-        {/* ORDER DETAILS MODAL */}
+        {/* ORDER DETAILS MODAL (ENHANCED) */}
         {selectedOrder && (
             <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm animate-in fade-in p-4">
-                <div className="bg-white rounded-2xl shadow-2xl w-full max-w-lg max-h-[90vh] flex flex-col overflow-hidden">
+                <div className="bg-white rounded-2xl shadow-2xl w-full max-w-xl max-h-[90vh] flex flex-col overflow-hidden">
+                    {/* Modal Header */}
                     <div className="p-6 border-b border-slate-100 flex justify-between items-start bg-slate-50">
                         <div>
-                            <h3 className="text-xl font-bold text-slate-800 flex items-center gap-2">
-                                Order #{selectedOrder.id.split('-')[1] || selectedOrder.id}
-                            </h3>
-                            <div className="flex gap-2 mt-2">
+                            <div className="flex items-center gap-3">
+                                <h3 className="text-2xl font-black text-slate-900">
+                                    Order #{selectedOrder.id.split('-')[1] || selectedOrder.id}
+                                </h3>
                                 <StatusBadge status={selectedOrder.status} />
+                            </div>
+                            <div className="flex flex-wrap gap-3 mt-3">
+                                <span className="flex items-center gap-1.5 text-xs font-bold text-slate-500 bg-slate-200/50 px-2 py-1 rounded-lg">
+                                    <Clock size={14} /> {format(new Date(selectedOrder.createdAt), 'dd MMM yyyy, hh:mm a')}
+                                </span>
                                 {selectedOrder.paymentStatus === PaymentStatus.PAID && (
-                                    <span className="bg-emerald-100 text-emerald-700 px-2 py-1 rounded-full text-xs font-bold border border-emerald-200 flex items-center gap-1">
-                                        PAID via {selectedOrder.paymentMethod}
+                                    <span className="flex items-center gap-1.5 text-xs font-bold text-emerald-700 bg-emerald-100 px-2 py-1 rounded-lg border border-emerald-200">
+                                        <CheckCircle size={14} /> PAID via {selectedOrder.paymentMethod}
                                     </span>
                                 )}
                             </div>
                         </div>
-                        <button onClick={() => setSelectedOrder(null)} className="text-slate-400 hover:text-slate-600 p-1 hover:bg-slate-200 rounded-full transition-colors">
+                        <button onClick={() => setSelectedOrder(null)} className="text-slate-400 hover:text-slate-600 p-1.5 hover:bg-slate-200 rounded-full transition-colors">
                             <X size={24} />
                         </button>
                     </div>
 
-                    <div className="flex-1 overflow-y-auto p-6 space-y-6">
-                        <div className="grid grid-cols-2 gap-4 text-sm">
+                    {/* Modal Content */}
+                    <div className="flex-1 overflow-y-auto p-6 space-y-8 bg-white">
+                        {/* Order Metadata Info */}
+                        <div className="grid grid-cols-2 md:grid-cols-3 gap-6 bg-slate-50 p-4 rounded-2xl border border-slate-100">
                             <div className="space-y-1">
-                                <p className="text-xs font-bold text-slate-400 uppercase">Date Created</p>
-                                <p className="font-medium text-slate-700">{format(new Date(selectedOrder.createdAt), 'dd MMM yyyy, hh:mm a')}</p>
+                                <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Table / Mode</p>
+                                <p className="font-bold text-slate-800 flex items-center gap-1.5">
+                                    {selectedOrder.tableNumber ? <><Hash size={14} className="text-blue-500"/> Table {selectedOrder.tableNumber}</> : 'Takeaway'}
+                                </p>
                             </div>
                             <div className="space-y-1">
-                                <p className="text-xs font-bold text-slate-400 uppercase">Table / Type</p>
-                                <p className="font-medium text-slate-700">{selectedOrder.tableNumber ? `Table ${selectedOrder.tableNumber}` : 'Takeaway'}</p>
-                            </div>
-                            <div className="space-y-1">
-                                <p className="text-xs font-bold text-slate-400 uppercase">Server</p>
-                                <p className="font-medium text-slate-700 flex items-center gap-1"><User size={12}/> {selectedOrder.serverName}</p>
+                                <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Served By</p>
+                                <p className="font-bold text-slate-800 flex items-center gap-1.5"><User size={14} className="text-blue-500"/> {selectedOrder.serverName}</p>
                             </div>
                             {selectedOrder.completedAt && (
                                 <div className="space-y-1">
-                                    <p className="text-xs font-bold text-slate-400 uppercase">Completed At</p>
-                                    <p className="font-medium text-slate-700">{format(new Date(selectedOrder.completedAt), 'hh:mm a')}</p>
+                                    <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Completed At</p>
+                                    <p className="font-bold text-slate-800 flex items-center gap-1.5"><CheckCircle size={14} className="text-emerald-500"/> {format(new Date(selectedOrder.completedAt), 'hh:mm a')}</p>
                                 </div>
                             )}
                         </div>
 
-                        <div className="border rounded-xl border-slate-200 overflow-hidden">
-                            <table className="w-full text-sm">
-                                <thead className="bg-slate-50 border-b border-slate-200">
-                                    <tr>
-                                        <th className="px-4 py-2 text-left text-xs font-bold text-slate-500 uppercase">Item</th>
-                                        <th className="px-4 py-2 text-center text-xs font-bold text-slate-500 uppercase">Qty</th>
-                                        <th className="px-4 py-2 text-right text-xs font-bold text-slate-500 uppercase">Price</th>
-                                    </tr>
-                                </thead>
-                                <tbody className="divide-y divide-slate-100">
-                                    {selectedOrder.items.map((item, idx) => (
-                                        <tr key={idx}>
-                                            <td className="px-4 py-3">
-                                                <p className="font-bold text-slate-700">{item.name}</p>
-                                                {item.portion && item.portion !== 'Full' && (
-                                                    <span className="text-xs text-blue-600 bg-blue-50 px-1.5 rounded">{item.portion}</span>
-                                                )}
-                                                {item.modifiers && item.modifiers.length > 0 && (
-                                                    <p className="text-xs text-amber-600 italic mt-0.5">Note: {item.modifiers.join(', ')}</p>
-                                                )}
-                                            </td>
-                                            <td className="px-4 py-3 text-center text-slate-600">{item.quantity}</td>
-                                            <td className="px-4 py-3 text-right font-mono text-slate-700">₹{(item.priceAtOrder * item.quantity).toFixed(2)}</td>
-                                        </tr>
-                                    ))}
-                                </tbody>
-                            </table>
+                        {/* Items Breakdown */}
+                        <div>
+                            <h4 className="text-xs font-black text-slate-400 uppercase tracking-widest mb-4 flex items-center gap-2">
+                                <Tag size={14} className="text-slate-300" /> Items List
+                            </h4>
+                            <div className="space-y-4">
+                                {selectedOrder.items.map((item, idx) => (
+                                    <div key={idx} className="flex gap-4 p-4 rounded-2xl bg-white border border-slate-100 hover:border-blue-100 hover:shadow-sm transition-all group">
+                                        <div className="w-10 h-10 bg-slate-100 text-slate-600 rounded-xl flex items-center justify-center font-black text-lg group-hover:bg-blue-600 group-hover:text-white transition-colors">
+                                            {item.quantity}
+                                        </div>
+                                        <div className="flex-1 min-w-0">
+                                            <div className="flex justify-between items-start">
+                                                <p className="font-bold text-slate-900 group-hover:text-blue-600 transition-colors">{item.name}</p>
+                                                <p className="font-mono font-bold text-slate-800 text-sm">₹{(item.priceAtOrder * item.quantity).toFixed(0)}</p>
+                                            </div>
+                                            <div className="flex flex-wrap items-center gap-2 mt-2">
+                                                <span className="inline-flex items-center gap-1 px-2 py-0.5 bg-slate-100 text-slate-600 rounded-md text-[10px] font-black uppercase tracking-wide border border-slate-200">
+                                                    <Info size={10} /> {item.portion || 'Full'}
+                                                </span>
+                                                <span className="text-[10px] font-bold text-slate-400">@ ₹{item.priceAtOrder}/unit</span>
+                                            </div>
+                                            
+                                            {item.modifiers && item.modifiers.length > 0 && (
+                                                <div className="mt-3 space-y-1">
+                                                    {item.modifiers.map((mod, midx) => (
+                                                        <div key={midx} className="flex items-start gap-2 bg-orange-50 text-orange-700 px-3 py-1.5 rounded-xl border border-orange-100">
+                                                            <MessageSquare size={12} className="mt-0.5 shrink-0 opacity-60" />
+                                                            <span className="text-xs font-bold leading-tight">{mod}</span>
+                                                        </div>
+                                                    ))}
+                                                </div>
+                                            )}
+                                        </div>
+                                    </div>
+                                ))}
+                            </div>
                         </div>
 
-                        <div className="bg-slate-50 p-4 rounded-xl space-y-2 border border-slate-100">
-                            <div className="flex justify-between text-sm text-slate-600">
+                        {/* Order Totals Summary */}
+                        <div className="space-y-3 pt-4 border-t border-slate-100">
+                            <div className="flex justify-between items-center text-sm font-medium text-slate-500">
                                 <span>Subtotal</span>
-                                <span>₹{selectedOrder.items.reduce((a,i) => a + (i.priceAtOrder*i.quantity), 0).toFixed(2)}</span>
+                                <span className="font-mono">₹{selectedOrder.items.reduce((a,i) => a + (i.priceAtOrder*i.quantity), 0).toFixed(2)}</span>
                             </div>
+                            
                             {selectedOrder.discount && selectedOrder.discount > 0 && (
-                                <div className="flex justify-between text-sm text-green-600">
-                                    <span>Discount</span>
-                                    <span>-₹{selectedOrder.discount.toFixed(2)}</span>
+                                <div className="flex justify-between items-center text-sm font-bold text-emerald-600 bg-emerald-50 px-3 py-2 rounded-xl border border-emerald-100">
+                                    <span className="flex items-center gap-1.5"><CheckCircle size={14}/> Discount Applied</span>
+                                    <span className="font-mono">-₹{selectedOrder.discount.toFixed(2)}</span>
                                 </div>
                             )}
-                            <div className="flex justify-between text-sm text-slate-600">
-                                <span>Tax ({selectedOrder.taxRate || 0}%)</span>
-                                <span>₹{(getOrderTotal(selectedOrder) - (selectedOrder.items.reduce((a,i) => a + (i.priceAtOrder*i.quantity), 0) - (selectedOrder.discount||0))).toFixed(2)}</span>
+                            
+                            <div className="flex justify-between items-center text-sm font-medium text-slate-500">
+                                <span>GST ({selectedOrder.taxRate || 0}%)</span>
+                                <span className="font-mono">₹{(getOrderTotal(selectedOrder) - (selectedOrder.items.reduce((a,i) => a + (i.priceAtOrder*i.quantity), 0) - (selectedOrder.discount||0))).toFixed(2)}</span>
                             </div>
-                            <div className="flex justify-between text-lg font-bold text-slate-900 border-t border-slate-300 pt-2 mt-2">
-                                <span>Total Amount</span>
-                                <span>₹{getOrderTotal(selectedOrder).toFixed(2)}</span>
+                            
+                            <div className="flex justify-between items-center pt-4 border-t border-dashed border-slate-300">
+                                <span className="text-lg font-black text-slate-900">Final Total</span>
+                                <span className="text-3xl font-black text-slate-900 tracking-tight">₹{getOrderTotal(selectedOrder).toFixed(2)}</span>
                             </div>
                         </div>
                     </div>
 
-                    <div className="p-4 border-t border-slate-200 bg-white flex justify-end gap-3">
-                        <button onClick={() => setSelectedOrder(null)} className="px-4 py-2 text-slate-600 hover:bg-slate-100 rounded-lg font-bold transition-colors">Close</button>
-                        {selectedOrder.status !== OrderStatus.CANCELLED && (
-                            <button className="px-4 py-2 bg-slate-800 text-white rounded-lg font-bold hover:bg-slate-900 flex items-center gap-2 shadow-lg" onClick={() => alert("Printing Receipt...")}>
-                                <FileText size={16} /> Reprint Receipt
-                            </button>
-                        )}
+                    {/* Modal Footer Actions */}
+                    <div className="p-4 border-t border-slate-100 bg-slate-50 flex justify-between gap-3">
+                        <button 
+                            onClick={() => setSelectedOrder(null)} 
+                            className="px-6 py-2.5 bg-white border border-slate-300 text-slate-700 rounded-xl font-bold hover:bg-slate-50 transition-all active:scale-95 text-sm"
+                        >
+                            Back to List
+                        </button>
+                        <div className="flex gap-2">
+                            {selectedOrder.status !== OrderStatus.CANCELLED && (
+                                <button 
+                                    className="px-6 py-2.5 bg-slate-900 text-white rounded-xl font-bold hover:bg-slate-800 flex items-center gap-2 shadow-lg shadow-slate-200 transition-all active:scale-95 text-sm" 
+                                    onClick={() => alert("Connecting to Printer...")}
+                                >
+                                    <Receipt size={18} /> Reprint Invoice
+                                </button>
+                            )}
+                        </div>
                     </div>
                 </div>
             </div>

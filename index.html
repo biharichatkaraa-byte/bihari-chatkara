@@ -13,7 +13,7 @@
     <script src="https://unpkg.com/html5-qrcode" type="text/javascript"></script>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Playfair+Display:wght@400;700;900&display=swap" rel="stylesheet">
     
-    <!-- Tailwind CSS CDN Fallback -->
+    <!-- Tailwind CSS CDN -->
     <script src="https://cdn.tailwindcss.com"></script>
     <script>
       tailwind.config = {
@@ -38,102 +38,53 @@
     </script>
 
     <style>
-      html, body, #root {
-        height: 100%;
-        margin: 0;
-        padding: 0;
-      }
-      body {
-        font-family: 'Inter', sans-serif;
-        background-color: #f3f4f6;
-        overscroll-behavior-y: none;
-      }
-      .font-serif {
-        font-family: 'Playfair Display', serif;
-      }
-      
-      /* Custom scrollbar for KDS/POS panels */
-      .no-scrollbar::-webkit-scrollbar {
-        display: none;
-      }
-      .no-scrollbar {
-        -ms-overflow-style: none;
-        scrollbar-width: none;
-      }
-      
-      .pb-safe-area {
-        padding-bottom: env(safe-area-inset-bottom);
-      }
+      html, body, #root { height: 100%; margin: 0; padding: 0; }
+      body { font-family: 'Inter', sans-serif; background-color: #f3f4f6; overscroll-behavior-y: none; }
+      .font-serif { font-family: 'Playfair Display', serif; }
+      .no-scrollbar::-webkit-scrollbar { display: none; }
+      .no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
+      .pb-safe-area { padding-bottom: env(safe-area-inset-bottom); }
 
-      /* Production Print Styles for Thermal Receipts */
       @media print {
-        @page {
-          margin: 0;
-          size: auto;
-        }
-        body, html {
-          background-color: white !important;
-          height: 100%;
-          width: 100%;
-          overflow: hidden;
-        }
-        body * {
-          visibility: hidden;
-          height: 0;
-        }
-        #printable-receipt, #printable-receipt * {
-          visibility: visible;
-          height: auto;
-        }
+        @page { margin: 0; size: auto; }
+        body, html { background-color: white !important; height: 100%; width: 100%; overflow: hidden; }
+        body * { visibility: hidden; height: 0; }
+        #printable-receipt, #printable-receipt * { visibility: visible; height: auto; }
         #printable-receipt {
-          position: fixed;
-          left: 0;
-          top: 0;
-          width: 100% !important; /* Forces modal content to take full width of paper */
-          max-width: 80mm; /* Standard thermal width approx */
-          margin: 0;
-          padding: 10px;
-          box-shadow: none !important;
-          border: none !important;
-          background: white !important;
-          color: black !important;
-          font-family: 'Courier New', Courier, monospace;
+          position: fixed; left: 0; top: 0; width: 100% !important; max-width: 80mm;
+          margin: 0; padding: 10px; box-shadow: none !important; border: none !important;
+          background: white !important; color: black !important; font-family: 'Courier New', Courier, monospace;
         }
-        .print-hidden {
-          display: none !important;
-        }
-        .text-slate-500, .text-slate-400, .text-slate-600 {
-          color: black !important;
-        }
-        .bg-slate-900 {
-          background: none !important;
-          color: black !important;
-          border: 1px solid black;
-        }
+        .print-hidden { display: none !important; }
+        .text-slate-500, .text-slate-400, .text-slate-600 { color: black !important; }
+        .bg-slate-900 { background: none !important; color: black !important; border: 1px solid black; }
       }
     </style>
-<script type="importmap">
+
+    <script type="importmap">
 {
   "imports": {
-    "react": "https://esm.sh/react@^19.2.3",
+    "react": "https://esm.sh/react@18.2.0",
+    "react-dom": "https://esm.sh/react-dom@18.2.0",
+    "react-dom/client": "https://esm.sh/react-dom@18.2.0/client",
+    "react/jsx-runtime": "https://esm.sh/react@18.2.0/jsx-runtime",
+    "lucide-react": "https://esm.sh/lucide-react@0.344.0?external=react",
+    "date-fns": "https://esm.sh/date-fns@4.1.0",
+    "recharts": "https://esm.sh/recharts@2.12.0?external=react,react-dom",
     "react-dom/": "https://esm.sh/react-dom@^19.2.3/",
     "react/": "https://esm.sh/react@^19.2.3/",
-    "lucide-react": "https://esm.sh/lucide-react@^0.561.0",
-    "date-fns": "https://esm.sh/date-fns@^4.1.0",
-    "recharts": "https://esm.sh/recharts@^3.5.1",
-    "vite": "https://esm.sh/vite@^7.2.7",
+    "vite": "https://esm.sh/vite@^7.3.0",
     "@vitejs/plugin-react": "https://esm.sh/@vitejs/plugin-react@^5.1.2",
     "dotenv/": "https://esm.sh/dotenv@^17.2.3/",
     "express": "https://esm.sh/express@^5.2.1",
     "cors": "https://esm.sh/cors@^2.8.5",
     "path": "https://esm.sh/path@^0.12.7",
-    "fs": "https://esm.sh/fs@^0.0.1-security",
     "url": "https://esm.sh/url@^0.11.4",
-    "mysql2/": "https://esm.sh/mysql2@^3.15.3/"
+    "mysql2/": "https://esm.sh/mysql2@^3.16.0/"
   }
 }
 </script>
-</head>
+  </head>
   <body>
     <div id="root"></div>
     <script type="module" src="./index.tsx"></script>

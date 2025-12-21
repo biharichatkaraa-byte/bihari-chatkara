@@ -1,5 +1,7 @@
 {
   "name": "Bihari Chatkara RMS",
-  "description": "A modern, cloud-based Restaurant Management System integrating POS, KDS, Inventory, and Labor management with AI-powered insights.",
-  "requestFramePermissions": []
+  "description": "Production-ready Restaurant Management System with POS, KDS, and Inventory Control.",
+  "requestFramePermissions": [
+    "camera"
+  ]
 }
