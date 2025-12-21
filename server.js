@@ -31,126 +31,136 @@ let pool = mysql.createPool(DB_CONFIG);
 let isDbInitialized = false;
 
 const initDb = async () => {
+    console.log(`[DB] Attempting connection to ${DB_CONFIG.host || 'Unix Socket'}...`);
+    let connection;
     try {
-        const connection = await pool.getConnection();
-        console.log(`[DB] Attempting connection to '${DB_CONFIG.database}' at ${DB_CONFIG.host || 'Cloud Socket'}...`);
+        connection = await pool.getConnection();
+        console.log(`[DB] Successfully connected to database: '${DB_CONFIG.database}'`);
         
-        // --- Tables Definition ---
-        const tables = [
-            `CREATE TABLE IF NOT EXISTS users (
-                id VARCHAR(50) PRIMARY KEY, 
-                name VARCHAR(100), 
-                email VARCHAR(100), 
-                role VARCHAR(50), 
-                permissions TEXT, 
-                password VARCHAR(100)
-            )`,
-            `CREATE TABLE IF NOT EXISTS menu_items (
-                id VARCHAR(50) PRIMARY KEY, 
-                category_id VARCHAR(50), 
-                sub_category_id VARCHAR(50), 
-                name VARCHAR(100), 
-                category VARCHAR(100), 
-                sub_category VARCHAR(100),
-                price DECIMAL(10, 2), 
-                description TEXT, 
-                is_veg TINYINT(1), 
-                available TINYINT(1) DEFAULT 1, 
-                ingredients TEXT, 
-                portion_prices TEXT, 
-                tags TEXT
-            )`,
-            `CREATE TABLE IF NOT EXISTS ingredients (
-                id VARCHAR(50) PRIMARY KEY, 
-                name VARCHAR(100), 
-                category VARCHAR(100), 
-                unit VARCHAR(20), 
-                unit_cost DECIMAL(10, 2), 
-                stock_quantity DECIMAL(10, 2),
-                barcode VARCHAR(100)
-            )`,
-            `CREATE TABLE IF NOT EXISTS orders (
-                id VARCHAR(50) PRIMARY KEY, 
-                table_number INT, 
-                server_name VARCHAR(100), 
-                status VARCHAR(50), 
-                payment_status VARCHAR(50), 
-                payment_method VARCHAR(50), 
-                created_at VARCHAR(64), 
-                completed_at VARCHAR(64),
-                tax_rate DECIMAL(5, 2), 
-                discount DECIMAL(10, 2)
-            )`,
-            `CREATE TABLE IF NOT EXISTS order_items (
-                id VARCHAR(50) PRIMARY KEY, 
-                order_id VARCHAR(50), 
-                menu_item_id VARCHAR(50), 
-                name VARCHAR(100), 
-                quantity INT, 
-                price_at_order DECIMAL(10, 2), 
-                portion VARCHAR(50), 
-                modifiers TEXT, 
-                FOREIGN KEY(order_id) REFERENCES orders(id) ON DELETE CASCADE
-            )`,
-            `CREATE TABLE IF NOT EXISTS expenses (
-                id VARCHAR(50) PRIMARY KEY, 
-                description TEXT, 
-                amount DECIMAL(10, 2), 
-                category VARCHAR(100), 
-                date VARCHAR(64), 
-                reported_by VARCHAR(100), 
-                receipt_image LONGTEXT
-            )`,
-            `CREATE TABLE IF NOT EXISTS requisitions (
-                id VARCHAR(50) PRIMARY KEY, 
-                ingredient_id VARCHAR(50), 
-                ingredient_name VARCHAR(100), 
-                quantity DECIMAL(10, 2), 
-                unit VARCHAR(20), 
-                urgency VARCHAR(20), 
-                status VARCHAR(20), 
-                requested_by VARCHAR(100), 
-                requested_at VARCHAR(64), 
-                notes TEXT, 
-                estimated_unit_cost DECIMAL(10, 2), 
-                preferred_supplier VARCHAR(100)
-            )`,
-            `CREATE TABLE IF NOT EXISTS customers (
-                id VARCHAR(50) PRIMARY KEY, 
-                name VARCHAR(100), 
-                phone VARCHAR(20), 
-                email VARCHAR(100), 
-                loyalty_points INT DEFAULT 0, 
-                total_visits INT DEFAULT 0, 
-                last_visit VARCHAR(64), 
-                notes TEXT
-            )`
-        ];
+        // 1. Create Tables Logic
+        await connection.query(`CREATE TABLE IF NOT EXISTS users (
+            id VARCHAR(50) PRIMARY KEY,
+            name VARCHAR(100) NOT NULL,
+            email VARCHAR(100) UNIQUE NOT NULL,
+            password VARCHAR(255) NOT NULL,
+            role ENUM('Manager', 'Server', 'Chef', 'Bartender') NOT NULL,
+            permissions JSON
+        )`);
 
-        for (const query of tables) {
-            await connection.query(query);
-        }
+        await connection.query(`CREATE TABLE IF NOT EXISTS ingredients (
+            id VARCHAR(50) PRIMARY KEY,
+            name VARCHAR(100) NOT NULL,
+            category VARCHAR(50),
+            unit VARCHAR(20) NOT NULL,
+            unit_cost DECIMAL(10,2) DEFAULT 0.00,
+            stock_quantity DECIMAL(10,2) DEFAULT 0.00,
+            barcode VARCHAR(100)
+        )`);
 
-        // Seeding default admin
-        const [userRows] = await connection.query('SELECT count(*) as count FROM users');
-        if (Number(userRows[0].count) === 0) {
-            console.log("[DB] Seeding default administrator...");
+        await connection.query(`CREATE TABLE IF NOT EXISTS menu_items (
+            id VARCHAR(50) PRIMARY KEY,
+            category_id VARCHAR(50),
+            sub_category_id VARCHAR(50),
+            name VARCHAR(100) NOT NULL,
+            category VARCHAR(50) NOT NULL,
+            sub_category VARCHAR(50),
+            price DECIMAL(10,2) NOT NULL,
+            portion_prices JSON,
+            is_veg BOOLEAN DEFAULT FALSE,
+            ingredients JSON,
+            description TEXT,
+            tags JSON,
+            available BOOLEAN DEFAULT TRUE
+        )`);
+
+        await connection.query(`CREATE TABLE IF NOT EXISTS orders (
+            id VARCHAR(50) PRIMARY KEY,
+            table_number INT,
+            server_name VARCHAR(100),
+            status ENUM('NEW', 'IN_PROGRESS', 'READY', 'SERVED', 'CANCELLED') DEFAULT 'NEW',
+            payment_status ENUM('PENDING', 'PAID', 'CANCELLED') DEFAULT 'PENDING',
+            payment_method ENUM('CASH', 'ONLINE', 'PAYTM_POS'),
+            created_at DATETIME NOT NULL,
+            completed_at DATETIME,
+            tax_rate DECIMAL(5,2) DEFAULT 0.00,
+            discount DECIMAL(10,2) DEFAULT 0.00
+        )`);
+
+        await connection.query(`CREATE TABLE IF NOT EXISTS order_items (
+            id VARCHAR(50) PRIMARY KEY,
+            order_id VARCHAR(50) NOT NULL,
+            menu_item_id VARCHAR(50),
+            name VARCHAR(100),
+            quantity INT DEFAULT 1,
+            price_at_order DECIMAL(10,2) NOT NULL,
+            portion VARCHAR(20),
+            modifiers JSON,
+            FOREIGN KEY (order_id) REFERENCES orders(id) ON DELETE CASCADE
+        )`);
+
+        await connection.query(`CREATE TABLE IF NOT EXISTS expenses (
+            id VARCHAR(50) PRIMARY KEY,
+            description TEXT NOT NULL,
+            amount DECIMAL(10,2) NOT NULL,
+            category VARCHAR(50),
+            date DATETIME NOT NULL,
+            reported_by VARCHAR(100),
+            receipt_image MEDIUMTEXT
+        )`);
+
+        await connection.query(`CREATE TABLE IF NOT EXISTS requisitions (
+            id VARCHAR(50) PRIMARY KEY,
+            ingredient_id VARCHAR(50),
+            ingredient_name VARCHAR(100),
+            quantity DECIMAL(10,2) NOT NULL,
+            unit VARCHAR(20),
+            urgency ENUM('LOW', 'MEDIUM', 'HIGH') DEFAULT 'LOW',
+            status ENUM('PENDING', 'ORDERED', 'RECEIVED', 'REJECTED') DEFAULT 'PENDING',
+            requested_by VARCHAR(100),
+            requested_at DATETIME NOT NULL,
+            notes TEXT,
+            estimated_unit_cost DECIMAL(10,2),
+            preferred_supplier VARCHAR(255)
+        )`);
+
+        await connection.query(`CREATE TABLE IF NOT EXISTS customers (
+            id VARCHAR(50) PRIMARY KEY,
+            name VARCHAR(100) NOT NULL,
+            phone VARCHAR(20) UNIQUE NOT NULL,
+            email VARCHAR(100),
+            loyalty_points INT DEFAULT 0,
+            total_visits INT DEFAULT 0,
+            last_visit DATETIME,
+            notes TEXT
+        )`);
+
+        // 2. Default Seed Check (Admin)
+        const [users] = await connection.query('SELECT count(*) as count FROM users');
+        if (users[0].count === 0) {
+            console.log("[DB] Seeding primary enterprise administrator...");
             await connection.query(
-                'INSERT INTO users (id, name, email, role, permissions, password) VALUES (?, ?, ?, ?, ?, ?)', 
-                ['u1', 'Administrator', 'admin@biharichatkara.com', 'Manager', '[]', 'admin123']
+                "INSERT INTO users (id, name, email, password, role, permissions) VALUES (?, ?, ?, ?, ?, ?)",
+                ['u-admin-root', 'System Admin', 'admin@biharichatkara.com', 'admin123', 'Manager', JSON.stringify([])]
             );
         }
-        
-        connection.release();
+
+        // 3. Optional Alterations (Adding columns if they don't exist for updates)
+        try {
+            await connection.query("ALTER TABLE ingredients ADD COLUMN IF NOT EXISTS barcode VARCHAR(100)");
+        } catch (e) { /* Column might exist or DB doesn't support IF NOT EXISTS in ALTER */ }
+
         isDbInitialized = true;
-        console.log("[DB] Database fully initialized.");
+        console.log("[DB] Enterprise schema verified and initialized.");
     } catch (e) {
-        console.error(`[DB] Fatal Error during init: ${e.message}`);
+        console.error(`[DB] ERROR during initialization: ${e.message}`);
+        console.error(`[DB] Detailed Stack Trace: ${e.stack}`);
+    } finally {
+        if (connection) connection.release();
     }
 };
 
 app.use(cors());
-app.use(express.json({ limit: '10mb' }));
+app.use(express.json({ limit: '15mb' }));
 
 const parseRow = (row, jsonFields = []) => {
     if (!row) return row;
@@ -163,12 +173,10 @@ const parseRow = (row, jsonFields = []) => {
         'requested_at': 'requestedAt', 'estimated_unit_cost': 'estimatedUnitCost', 'loyalty_points': 'loyaltyPoints',
         'total_visits': 'totalVisits', 'last_visit': 'lastVisit', 'receipt_image': 'receiptImage'
     };
-    const numericFields = ['price', 'unitCost', 'stockQuantity', 'tableNumber', 'taxRate', 'discount', 'quantity', 'priceAtOrder', 'loyaltyPoints', 'totalVisits'];
     const final = {};
     Object.keys(row).forEach(key => {
         const newKey = map[key] || key;
         let val = row[key];
-        if (numericFields.includes(newKey) && val !== null) val = Number(val);
         final[newKey] = val;
     });
     jsonFields.forEach(field => { 
@@ -182,7 +190,7 @@ const parseRow = (row, jsonFields = []) => {
 };
 
 const api = express.Router();
-api.get('/health', (req, res) => res.json({ status: isDbInitialized ? 'ok' : 'initializing' }));
+api.get('/health', (req, res) => res.json({ status: isDbInitialized ? 'ok' : 'initializing', db: isDbInitialized }));
 
 api.post('/login', async (req, res) => {
     const { email, password } = req.body;
@@ -190,7 +198,8 @@ api.post('/login', async (req, res) => {
         const [rows] = await pool.query('SELECT * FROM users WHERE email = ? AND password = ?', [email, password]);
         if (rows.length > 0) {
             const user = parseRow(rows[0], ['permissions']);
-            delete user.password; res.json({ success: true, user });
+            delete user.password; 
+            res.json({ success: true, user });
         } else res.status(401).json({ success: false, error: 'Invalid credentials' });
     } catch (e) { res.status(500).json({ success: false, error: e.message }); }
 });
@@ -220,7 +229,7 @@ api.post('/orders', async (req, res) => {
         await connection.beginTransaction();
         await connection.query(
             'INSERT INTO orders (id, table_number, server_name, status, payment_status, created_at, tax_rate, discount) VALUES (?, ?, ?, ?, ?, ?, ?, ?)', 
-            [o.id, o.tableNumber, o.serverName, o.status, o.paymentStatus, new Date(o.createdAt).toISOString(), o.taxRate || 0, o.discount || 0]
+            [o.id, o.tableNumber, o.serverName, o.status, o.paymentStatus, new Date(o.createdAt).toISOString().slice(0, 19).replace('T', ' '), o.taxRate || 0, o.discount || 0]
         );
         for (const i of (o.items || [])) {
             await connection.query(
@@ -235,7 +244,7 @@ api.post('/orders', async (req, res) => {
 api.put('/orders/:id', async (req, res) => {
     const o = req.body;
     try {
-        const completedAt = o.completedAt ? new Date(o.completedAt).toISOString() : null;
+        const completedAt = o.completedAt ? new Date(o.completedAt).toISOString().slice(0, 19).replace('T', ' ') : null;
         await pool.query(
             'UPDATE orders SET status = ?, payment_status = ?, payment_method = ?, completed_at = ?, discount = ?, tax_rate = ? WHERE id = ?', 
             [o.status, o.paymentStatus, o.paymentMethod, completedAt, o.discount || 0, o.taxRate || 0, req.params.id]
@@ -251,11 +260,55 @@ api.get('/menu-items', async (req, res) => {
     } catch (e) { res.status(500).json({ error: e.message }); } 
 });
 
+api.post('/menu-items', async (req, res) => {
+    const i = req.body;
+    try {
+        await pool.query(
+            'INSERT INTO menu_items (id, category_id, sub_category_id, name, category, sub_category, price, portion_prices, is_veg, ingredients, description, tags, available) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)',
+            [i.id, i.categoryId, i.subCategoryId, i.name, i.category, i.subCategory, i.price, JSON.stringify(i.portionPrices), i.isVeg, JSON.stringify(i.ingredients), i.description, JSON.stringify(i.tags), i.available]
+        );
+        res.json({ success: true });
+    } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+api.put('/menu-items/:id', async (req, res) => {
+    const i = req.body;
+    try {
+        await pool.query(
+            'UPDATE menu_items SET name=?, category=?, sub_category=?, price=?, portion_prices=?, is_veg=?, ingredients=?, description=?, tags=?, available=? WHERE id=?',
+            [i.name, i.category, i.subCategory, i.price, JSON.stringify(i.portionPrices), i.isVeg, JSON.stringify(i.ingredients), i.description, JSON.stringify(i.tags), i.available, req.params.id]
+        );
+        res.json({ success: true });
+    } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
 api.get('/ingredients', async (req, res) => { 
     try { 
         const [rows] = await pool.query('SELECT * FROM ingredients'); 
         res.json(rows.map(r => parseRow(r))); 
     } catch (e) { res.status(500).json({ error: e.message }); } 
+});
+
+api.post('/ingredients', async (req, res) => {
+    const i = req.body;
+    try {
+        await pool.query(
+            'INSERT INTO ingredients (id, name, category, unit, unit_cost, stock_quantity, barcode) VALUES (?,?,?,?,?,?,?)',
+            [i.id, i.name, i.category, i.unit, i.unitCost, i.stockQuantity, i.barcode]
+        );
+        res.json({ success: true });
+    } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+api.put('/ingredients/:id', async (req, res) => {
+    const i = req.body;
+    try {
+        await pool.query(
+            'UPDATE ingredients SET name=?, category=?, unit=?, unit_cost=?, stock_quantity=?, barcode=? WHERE id=?',
+            [i.name, i.category, i.unit, i.unitCost, i.stockQuantity, i.barcode, req.params.id]
+        );
+        res.json({ success: true });
+    } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
 api.get('/users', async (req, res) => { 
@@ -265,11 +318,33 @@ api.get('/users', async (req, res) => {
     } catch (e) { res.status(500).json({ error: e.message }); } 
 });
 
+api.post('/users', async (req, res) => {
+    const u = req.body;
+    try {
+        await pool.query(
+            'INSERT INTO users (id, name, email, password, role, permissions) VALUES (?,?,?,?,?,?)',
+            [u.id, u.name, u.email, u.password, u.role, JSON.stringify(u.permissions || [])]
+        );
+        res.json({ success: true });
+    } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
 api.get('/expenses', async (req, res) => { 
     try { 
         const [rows] = await pool.query('SELECT * FROM expenses ORDER BY date DESC'); 
         res.json(rows.map(r => parseRow(r))); 
     } catch (e) { res.status(500).json({ error: e.message }); } 
+});
+
+api.post('/expenses', async (req, res) => {
+    const e = req.body;
+    try {
+        await pool.query(
+            'INSERT INTO expenses (id, description, amount, category, date, reported_by, receipt_image) VALUES (?,?,?,?,?,?,?)',
+            [e.id, e.description, e.amount, e.category, new Date(e.date).toISOString().slice(0, 19).replace('T', ' '), e.reportedBy, e.receiptImage]
+        );
+        res.json({ success: true });
+    } catch (err) { res.status(500).json({ error: err.message }); }
 });
 
 api.get('/requisitions', async (req, res) => { 
@@ -279,6 +354,17 @@ api.get('/requisitions', async (req, res) => {
     } catch (e) { res.status(500).json({ error: e.message }); } 
 });
 
+api.post('/requisitions', async (req, res) => {
+    const r = req.body;
+    try {
+        await pool.query(
+            'INSERT INTO requisitions (id, ingredient_id, ingredient_name, quantity, unit, urgency, status, requested_by, requested_at, notes, estimated_unit_cost, preferred_supplier) VALUES (?,?,?,?,?,?,?,?,?,?,?,?)',
+            [r.id, r.ingredientId, r.ingredientName, r.quantity, r.unit, r.urgency, r.status, r.requestedBy, new Date(r.requestedAt).toISOString().slice(0, 19).replace('T', ' '), r.notes, r.estimatedUnitCost, r.preferredSupplier]
+        );
+        res.json({ success: true });
+    } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
 api.get('/customers', async (req, res) => { 
     try { 
         const [rows] = await pool.query('SELECT * FROM customers'); 
@@ -286,9 +372,19 @@ api.get('/customers', async (req, res) => {
     } catch (e) { res.status(500).json({ error: e.message }); } 
 });
 
+api.post('/customers', async (req, res) => {
+    const c = req.body;
+    try {
+        await pool.query(
+            'INSERT INTO customers (id, name, phone, email, loyalty_points, total_visits, last_visit, notes) VALUES (?,?,?,?,?,?,?,?)',
+            [c.id, c.name, c.phone, c.email, c.loyaltyPoints, c.totalVisits, new Date(c.lastVisit).toISOString().slice(0, 19).replace('T', ' '), c.notes]
+        );
+        res.json({ success: true });
+    } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
 app.use('/api', api);
 
-// Production Static Handler
 if (process.env.NODE_ENV === 'production') {
     app.use(express.static(path.join(__dirname, 'dist')));
     app.get('*', (req, res) => res.sendFile(path.resolve(__dirname, 'dist', 'index.html')));

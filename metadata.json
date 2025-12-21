@@ -1,6 +1,6 @@
 {
-  "name": "Bihari Chatkara RMS",
-  "description": "Enterprise-grade Restaurant Management System featuring POS, KDS, Advanced Inventory, and Cloud Database Integration.",
+  "name": "Bihari Chatkara Enterprise RMS",
+  "description": "Enterprise-grade Restaurant Management System featuring real-time POS, KDS synchronization, advanced multi-level inventory tracking, and integrated cloud financial analytics.",
   "requestFramePermissions": [
     "camera"
   ]
