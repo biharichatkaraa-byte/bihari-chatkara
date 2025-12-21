@@ -16,7 +16,7 @@ const DB_CONFIG = {
     host: process.env.DB_HOST || '127.0.0.1',
     port: process.env.DB_PORT ? parseInt(process.env.DB_PORT) : 3306,
     waitForConnections: true,
-    connectionLimit: 10,
+    connectionLimit: 20, // Increased for enterprise scale
     queueLimit: 0,
 };
 
@@ -31,14 +31,21 @@ let pool = mysql.createPool(DB_CONFIG);
 let isDbInitialized = false;
 
 const initDb = async () => {
-    console.log(`[DB] Attempting connection to ${DB_CONFIG.host || 'Unix Socket'}...`);
+    console.log(`[SYS-DB] Initializing Enterprise Data Layer...`);
+    console.log(`[SYS-DB] Target Host: ${DB_CONFIG.host || 'Unix Socket'} | Database: '${DB_CONFIG.database}'`);
+    
     let connection;
     try {
         connection = await pool.getConnection();
-        console.log(`[DB] Successfully connected to database: '${DB_CONFIG.database}'`);
+        console.log(`[SYS-DB] Connection verified. Building schema robustness...`);
         
-        // 1. Create Tables Logic
-        await connection.query(`CREATE TABLE IF NOT EXISTS users (
+        // Helper to log individual table status
+        const ensureTable = async (name, query) => {
+            await connection.query(query);
+            console.log(`[SYS-DB] Table Verified: '${name}'`);
+        };
+
+        await ensureTable('users', `CREATE TABLE IF NOT EXISTS users (
             id VARCHAR(50) PRIMARY KEY,
             name VARCHAR(100) NOT NULL,
             email VARCHAR(100) UNIQUE NOT NULL,
@@ -47,7 +54,7 @@ const initDb = async () => {
             permissions JSON
         )`);
 
-        await connection.query(`CREATE TABLE IF NOT EXISTS ingredients (
+        await ensureTable('ingredients', `CREATE TABLE IF NOT EXISTS ingredients (
             id VARCHAR(50) PRIMARY KEY,
             name VARCHAR(100) NOT NULL,
             category VARCHAR(50),
@@ -57,7 +64,7 @@ const initDb = async () => {
             barcode VARCHAR(100)
         )`);
 
-        await connection.query(`CREATE TABLE IF NOT EXISTS menu_items (
+        await ensureTable('menu_items', `CREATE TABLE IF NOT EXISTS menu_items (
             id VARCHAR(50) PRIMARY KEY,
             category_id VARCHAR(50),
             sub_category_id VARCHAR(50),
@@ -73,7 +80,7 @@ const initDb = async () => {
             available BOOLEAN DEFAULT TRUE
         )`);
 
-        await connection.query(`CREATE TABLE IF NOT EXISTS orders (
+        await ensureTable('orders', `CREATE TABLE IF NOT EXISTS orders (
             id VARCHAR(50) PRIMARY KEY,
             table_number INT,
             server_name VARCHAR(100),
@@ -86,7 +93,7 @@ const initDb = async () => {
             discount DECIMAL(10,2) DEFAULT 0.00
         )`);
 
-        await connection.query(`CREATE TABLE IF NOT EXISTS order_items (
+        await ensureTable('order_items', `CREATE TABLE IF NOT EXISTS order_items (
             id VARCHAR(50) PRIMARY KEY,
             order_id VARCHAR(50) NOT NULL,
             menu_item_id VARCHAR(50),
@@ -95,10 +102,11 @@ const initDb = async () => {
             price_at_order DECIMAL(10,2) NOT NULL,
             portion VARCHAR(20),
             modifiers JSON,
+            INDEX (order_id),
             FOREIGN KEY (order_id) REFERENCES orders(id) ON DELETE CASCADE
         )`);
 
-        await connection.query(`CREATE TABLE IF NOT EXISTS expenses (
+        await ensureTable('expenses', `CREATE TABLE IF NOT EXISTS expenses (
             id VARCHAR(50) PRIMARY KEY,
             description TEXT NOT NULL,
             amount DECIMAL(10,2) NOT NULL,
@@ -108,7 +116,7 @@ const initDb = async () => {
             receipt_image MEDIUMTEXT
         )`);
 
-        await connection.query(`CREATE TABLE IF NOT EXISTS requisitions (
+        await ensureTable('requisitions', `CREATE TABLE IF NOT EXISTS requisitions (
             id VARCHAR(50) PRIMARY KEY,
             ingredient_id VARCHAR(50),
             ingredient_name VARCHAR(100),
@@ -123,7 +131,7 @@ const initDb = async () => {
             preferred_supplier VARCHAR(255)
         )`);
 
-        await connection.query(`CREATE TABLE IF NOT EXISTS customers (
+        await ensureTable('customers', `CREATE TABLE IF NOT EXISTS customers (
             id VARCHAR(50) PRIMARY KEY,
             name VARCHAR(100) NOT NULL,
             phone VARCHAR(20) UNIQUE NOT NULL,
@@ -134,26 +142,30 @@ const initDb = async () => {
             notes TEXT
         )`);
 
-        // 2. Default Seed Check (Admin)
+        // Check for Administrator seed
         const [users] = await connection.query('SELECT count(*) as count FROM users');
         if (users[0].count === 0) {
-            console.log("[DB] Seeding primary enterprise administrator...");
+            console.log("[SYS-DB] Seeding primary System Administrator...");
             await connection.query(
                 "INSERT INTO users (id, name, email, password, role, permissions) VALUES (?, ?, ?, ?, ?, ?)",
-                ['u-admin-root', 'System Admin', 'admin@biharichatkara.com', 'admin123', 'Manager', JSON.stringify([])]
+                ['u-root-admin', 'System Admin', 'admin@biharichatkara.com', 'admin123', 'Manager', JSON.stringify([])]
             );
         }
 
-        // 3. Optional Alterations (Adding columns if they don't exist for updates)
-        try {
-            await connection.query("ALTER TABLE ingredients ADD COLUMN IF NOT EXISTS barcode VARCHAR(100)");
-        } catch (e) { /* Column might exist or DB doesn't support IF NOT EXISTS in ALTER */ }
+        // Schema evolution checks
+        console.log("[SYS-DB] Checking for schema updates...");
+        const [columns] = await connection.query(`SHOW COLUMNS FROM ingredients LIKE 'barcode'`);
+        if (columns.length === 0) {
+            console.log("[SYS-DB] Migrating schema: Adding 'barcode' column to 'ingredients'...");
+            await connection.query("ALTER TABLE ingredients ADD COLUMN barcode VARCHAR(100)");
+        }
 
         isDbInitialized = true;
-        console.log("[DB] Enterprise schema verified and initialized.");
+        console.log("[SYS-DB] Enterprise Data Layer Online.");
     } catch (e) {
-        console.error(`[DB] ERROR during initialization: ${e.message}`);
-        console.error(`[DB] Detailed Stack Trace: ${e.stack}`);
+        console.error(`[SYS-DB] FATAL: Initialization failed!`);
+        console.error(`[SYS-DB] Message: ${e.message}`);
+        console.error(`[SYS-DB] Stack: ${e.stack}`);
     } finally {
         if (connection) connection.release();
     }
@@ -190,7 +202,7 @@ const parseRow = (row, jsonFields = []) => {
 };
 
 const api = express.Router();
-api.get('/health', (req, res) => res.json({ status: isDbInitialized ? 'ok' : 'initializing', db: isDbInitialized }));
+api.get('/health', (req, res) => res.json({ status: isDbInitialized ? 'ok' : 'initializing', db: isDbInitialized, engine: 'Enterprise v2.5' }));
 
 api.post('/login', async (req, res) => {
     const { email, password } = req.body;
@@ -200,7 +212,7 @@ api.post('/login', async (req, res) => {
             const user = parseRow(rows[0], ['permissions']);
             delete user.password; 
             res.json({ success: true, user });
-        } else res.status(401).json({ success: false, error: 'Invalid credentials' });
+        } else res.status(401).json({ success: false, error: 'Access Denied: Invalid Credentials' });
     } catch (e) { res.status(500).json({ success: false, error: e.message }); }
 });
 
@@ -391,5 +403,5 @@ if (process.env.NODE_ENV === 'production') {
 }
 
 initDb().then(() => {
-    app.listen(PORT, () => console.log(`[RMS Server] Online at http://localhost:${PORT}`));
+    app.listen(PORT, () => console.log(`[RMS Server] Online at http://localhost:${PORT} | Ready for Enterprise Traffic`));
 });

@@ -1,6 +1,7 @@
 {
   "name": "Bihari Chatkara Enterprise RMS",
-  "description": "Enterprise-grade Restaurant Management System featuring real-time POS, KDS synchronization, advanced multi-level inventory tracking, and integrated cloud financial analytics.",
+  "short_name": "Enterprise RMS",
+  "description": "High-performance Enterprise Restaurant Management System. Features include real-time multi-terminal POS, AI-driven inventory optimization, cloud-synced Kitchen Display Systems (KDS), and comprehensive financial analytics.",
   "requestFramePermissions": [
     "camera"
   ]
