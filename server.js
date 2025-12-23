@@ -90,15 +90,15 @@ const initDb = async () => {
 
         await ensureTable('order_items', `CREATE TABLE IF NOT EXISTS order_items (
             id VARCHAR(50) PRIMARY KEY,
-            order_id VARCHAR(50) NOT NULL,
+            orderId VARCHAR(50) NOT NULL,
             menu_item_id VARCHAR(50),
             name VARCHAR(100),
             quantity INT DEFAULT 1,
             price_at_order DECIMAL(10,2) NOT NULL,
             portion VARCHAR(20),
             modifiers JSON,
-            INDEX (order_id),
-            FOREIGN KEY (order_id) REFERENCES orders(id) ON DELETE CASCADE
+            INDEX (orderId),
+            FOREIGN KEY (orderId) REFERENCES orders(id) ON DELETE CASCADE
         )`);
 
         await ensureTable('expenses', `CREATE TABLE IF NOT EXISTS expenses (
@@ -220,7 +220,7 @@ api.get('/orders', async (req, res) => {
         const [orders] = await pool.query('SELECT * FROM orders ORDER BY created_at DESC LIMIT 200');
         const result = orders.map(o => parseRow(o));
         if (result.length > 0) {
-            const [allItems] = await pool.query(`SELECT * FROM order_items WHERE order_id IN (?)`, [result.map(o => o.id)]);
+            const [allItems] = await pool.query(`SELECT * FROM order_items WHERE orderId IN (?)`, [result.map(o => o.id)]);
             const itemsMap = {};
             allItems.forEach(item => {
                 const p = parseRow(item, ['modifiers']);
@@ -244,7 +244,7 @@ api.post('/orders', async (req, res) => {
         );
         for (const i of (o.items || [])) {
             await connection.query(
-                'INSERT INTO order_items (id, order_id, menu_item_id, name, quantity, price_at_order, portion, modifiers) VALUES (?, ?, ?, ?, ?, ?, ?, ?)', 
+                'INSERT INTO order_items (id, orderId, menu_item_id, name, quantity, price_at_order, portion, modifiers) VALUES (?, ?, ?, ?, ?, ?, ?, ?)', 
                 [i.id, o.id, i.menuItemId, i.name, i.quantity, i.priceAtOrder, i.portion, JSON.stringify(i.modifiers || [])]
             );
         }
