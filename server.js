@@ -16,7 +16,7 @@ const DB_CONFIG = {
     host: process.env.DB_HOST || '127.0.0.1',
     port: process.env.DB_PORT ? parseInt(process.env.DB_PORT) : 3306,
     waitForConnections: true,
-    connectionLimit: 20, // Increased for enterprise scale
+    connectionLimit: 20, 
     queueLimit: 0,
 };
 
@@ -32,14 +32,9 @@ let isDbInitialized = false;
 
 const initDb = async () => {
     console.log(`[SYS-DB] Initializing Enterprise Data Layer...`);
-    console.log(`[SYS-DB] Target Host: ${DB_CONFIG.host || 'Unix Socket'} | Database: '${DB_CONFIG.database}'`);
-    
     let connection;
     try {
         connection = await pool.getConnection();
-        console.log(`[SYS-DB] Connection verified. Building schema robustness...`);
-        
-        // Helper to log individual table status
         const ensureTable = async (name, query) => {
             await connection.query(query);
             console.log(`[SYS-DB] Table Verified: '${name}'`);
@@ -95,15 +90,15 @@ const initDb = async () => {
 
         await ensureTable('order_items', `CREATE TABLE IF NOT EXISTS order_items (
             id VARCHAR(50) PRIMARY KEY,
-            orderId VARCHAR(50) NOT NULL,
+            order_id VARCHAR(50) NOT NULL,
             menu_item_id VARCHAR(50),
             name VARCHAR(100),
             quantity INT DEFAULT 1,
             price_at_order DECIMAL(10,2) NOT NULL,
             portion VARCHAR(20),
             modifiers JSON,
-            INDEX (orderId),
-            FOREIGN KEY (orderId) REFERENCES orders(id) ON DELETE CASCADE
+            INDEX (order_id),
+            FOREIGN KEY (order_id) REFERENCES orders(id) ON DELETE CASCADE
         )`);
 
         await ensureTable('expenses', `CREATE TABLE IF NOT EXISTS expenses (
@@ -142,30 +137,23 @@ const initDb = async () => {
             notes TEXT
         )`);
 
-        // Check for Administrator seed
         const [users] = await connection.query('SELECT count(*) as count FROM users');
         if (users[0].count === 0) {
-            console.log("[SYS-DB] Seeding primary System Administrator...");
             await connection.query(
                 "INSERT INTO users (id, name, email, password, role, permissions) VALUES (?, ?, ?, ?, ?, ?)",
                 ['u-root-admin', 'System Admin', 'admin@biharichatkara.com', 'admin123', 'Manager', JSON.stringify([])]
             );
         }
 
-        // Schema evolution checks
-        console.log("[SYS-DB] Checking for schema updates...");
         const [columns] = await connection.query(`SHOW COLUMNS FROM ingredients LIKE 'barcode'`);
         if (columns.length === 0) {
-            console.log("[SYS-DB] Migrating schema: Adding 'barcode' column to 'ingredients'...");
             await connection.query("ALTER TABLE ingredients ADD COLUMN barcode VARCHAR(100)");
         }
 
         isDbInitialized = true;
         console.log("[SYS-DB] Enterprise Data Layer Online.");
     } catch (e) {
-        console.error(`[SYS-DB] FATAL: Initialization failed!`);
-        console.error(`[SYS-DB] Message: ${e.message}`);
-        console.error(`[SYS-DB] Stack: ${e.stack}`);
+        console.error(`[SYS-DB] FATAL: Initialization failed! ${e.message}`);
     } finally {
         if (connection) connection.release();
     }
@@ -185,17 +173,28 @@ const parseRow = (row, jsonFields = []) => {
         'requested_at': 'requestedAt', 'estimated_unit_cost': 'estimatedUnitCost', 'loyalty_points': 'loyaltyPoints',
         'total_visits': 'totalVisits', 'last_visit': 'lastVisit', 'receipt_image': 'receiptImage'
     };
+    
+    // Fields that MUST be numbers to prevent .toFixed errors on frontend
+    const numericFields = ['unitCost', 'stockQuantity', 'price', 'taxRate', 'discount', 'priceAtOrder', 'quantity', 'amount', 'estimatedUnitCost', 'loyaltyPoints', 'totalVisits'];
+
     const final = {};
     Object.keys(row).forEach(key => {
         const newKey = map[key] || key;
         let val = row[key];
+        
+        if (numericFields.includes(newKey)) {
+            val = val === null || val === undefined ? 0 : Number(val);
+        }
+        
         final[newKey] = val;
     });
+
     jsonFields.forEach(field => { 
         if (final[field]) {
-            try { final[field] = JSON.parse(final[field]); } catch(e) { final[field] = []; } 
+            try { final[field] = typeof final[field] === 'string' ? JSON.parse(final[field]) : final[field]; } catch(e) { final[field] = []; } 
         }
     });
+
     if (final.isVeg !== undefined) final.isVeg = Boolean(final.isVeg);
     if (final.available !== undefined) final.available = Boolean(final.available);
     return final;
@@ -221,7 +220,7 @@ api.get('/orders', async (req, res) => {
         const [orders] = await pool.query('SELECT * FROM orders ORDER BY created_at DESC LIMIT 200');
         const result = orders.map(o => parseRow(o));
         if (result.length > 0) {
-            const [allItems] = await pool.query(`SELECT * FROM order_items WHERE orderId IN (?)`, [result.map(o => o.id)]);
+            const [allItems] = await pool.query(`SELECT * FROM order_items WHERE order_id IN (?)`, [result.map(o => o.id)]);
             const itemsMap = {};
             allItems.forEach(item => {
                 const p = parseRow(item, ['modifiers']);
@@ -245,7 +244,7 @@ api.post('/orders', async (req, res) => {
         );
         for (const i of (o.items || [])) {
             await connection.query(
-                'INSERT INTO order_items (id, orderId, menu_item_id, name, quantity, price_at_order, portion, modifiers) VALUES (?, ?, ?, ?, ?, ?, ?, ?)', 
+                'INSERT INTO order_items (id, order_id, menu_item_id, name, quantity, price_at_order, portion, modifiers) VALUES (?, ?, ?, ?, ?, ?, ?, ?)', 
                 [i.id, o.id, i.menuItemId, i.name, i.quantity, i.priceAtOrder, i.portion, JSON.stringify(i.modifiers || [])]
             );
         }
@@ -403,5 +402,5 @@ if (process.env.NODE_ENV === 'production') {
 }
 
 initDb().then(() => {
-    app.listen(PORT, () => console.log(`[RMS Server] Online at http://localhost:${PORT} | Ready for Enterprise Traffic`));
+    app.listen(PORT, () => console.log(`[RMS Server] Online at http://localhost:${PORT}`));
 });

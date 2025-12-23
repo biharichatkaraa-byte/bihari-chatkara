@@ -1,7 +1,7 @@
 {
   "name": "bihari-chatkara-rms",
   "private": true,
-  "version": "2.5.0",
+  "version": "2.5.1",
   "type": "module",
   "description": "Production Ready Restaurant Management System.",
   "scripts": {
@@ -18,8 +18,8 @@
     "express": "^4.18.2",
     "react": "^18.2.0",
     "react-dom": "^18.2.0",
-     "lucide-react": "^0.562.0",
-    "recharts": "^3.6.0"
+    "lucide-react": "^0.344.0",
+    "recharts": "^2.12.0"
   },
   "devDependencies": {
     "@vitejs/plugin-react": "^4.2.1",

@@ -74,14 +74,13 @@ const POS: React.FC<POSProps> = ({ orders, menuItems, onPlaceOrder, onUpdateOrde
   const getPortionPrice = (item: MenuItem, portion: PortionType): number => {
       if (item.portionPrices) {
           const p = portion.toLowerCase() as keyof typeof item.portionPrices;
-          if (item.portionPrices[p] && item.portionPrices[p]! > 0) return item.portionPrices[p]!;
+          if (item.portionPrices[p] && Number(item.portionPrices[p])! > 0) return Number(item.portionPrices[p])!;
       }
-      if (portion === 'Full') return item.price || 0;
-      if (portion === 'Half') return Math.ceil((item.price || 0) * 0.6);
+      if (portion === 'Full') return Number(item.price || 0);
+      if (portion === 'Half') return Math.ceil(Number(item.price || 0) * 0.6);
       return 0;
   };
 
-  // Robust Item Recovery Logic
   const repairItems = (items: LineItem[]): LineItem[] => {
       return items.map(item => {
           let price = Number(item.priceAtOrder) || 0;
@@ -96,15 +95,15 @@ const POS: React.FC<POSProps> = ({ orders, menuItems, onPlaceOrder, onUpdateOrde
   };
 
   const getOrderTotal = (order: Order) => {
-      const subtotal = repairItems(order.items).reduce((acc, i) => acc + (i.priceAtOrder * i.quantity), 0);
-      const taxable = Math.max(0, subtotal - (order.discount || 0));
-      return taxable + (taxable * ((order.taxRate || 0) / 100));
+      const subtotal = repairItems(order.items).reduce((acc, i) => acc + (Number(i.priceAtOrder) * Number(i.quantity)), 0);
+      const taxable = Math.max(0, subtotal - Number(order.discount || 0));
+      return taxable + (taxable * (Number(order.taxRate || 0) / 100));
   };
 
   const addToCart = (item: MenuItem, portion: string, price: number, qty: number = 1) => {
     const existing = currentCart.find(l => l.menuItemId === item.id && l.portion === portion);
     if (existing) {
-      setCurrentCart(currentCart.map(l => (l.menuItemId === item.id && l.portion === portion) ? { ...l, quantity: l.quantity + qty } : l));
+      setCurrentCart(currentCart.map(l => (l.menuItemId === item.id && l.portion === portion) ? { ...l, quantity: Number(l.quantity) + qty } : l));
     } else {
       setCurrentCart([...currentCart, { id: `l-${Date.now()}-${Math.random()}`, menuItemId: item.id, name: item.name, quantity: qty, priceAtOrder: price, portion, modifiers: [] }]);
     }
@@ -112,9 +111,9 @@ const POS: React.FC<POSProps> = ({ orders, menuItems, onPlaceOrder, onUpdateOrde
 
   const handleItemClick = (item: MenuItem) => {
     if (!item.available && userRole !== UserRole.MANAGER) return;
-    const hasPortions = item.portionPrices && (item.portionPrices.half || item.portionPrices.quarter);
+    const hasPortions = item.portionPrices && (Number(item.portionPrices.half) > 0 || Number(item.portionPrices.quarter) > 0);
     if (hasPortions) { setPortionItem(item); setSelectedPortionType('Full'); setPortionQuantity(1); }
-    else { addToCart(item, 'Full', item.price); }
+    else { addToCart(item, 'Full', Number(item.price)); }
   };
 
   const constructOrderObject = (status = OrderStatus.NEW, pStatus = PaymentStatus.PENDING, method?: PaymentMethod): Order => ({
@@ -192,7 +191,7 @@ const POS: React.FC<POSProps> = ({ orders, menuItems, onPlaceOrder, onUpdateOrde
                           <span className="text-2xl font-black">{t}</span>
                           {active && (
                               <div className="mt-1 text-center">
-                                  <span className="text-xs font-bold text-orange-600">₹{getOrderTotal(active).toFixed(0)}</span>
+                                  <span className="text-xs font-bold text-orange-600">₹{(Number(getOrderTotal(active)) || 0).toFixed(0)}</span>
                                   <div className="text-[10px] text-slate-500 flex items-center gap-1"><Timer size={10} />{formatDistanceToNow(safeDate(active.createdAt)).replace('about ', '')}</div>
                               </div>
                           )}
@@ -236,7 +235,7 @@ const POS: React.FC<POSProps> = ({ orders, menuItems, onPlaceOrder, onUpdateOrde
                            <div key={i.id} onClick={() => handleItemClick(i)} className="bg-white p-3 rounded-xl border hover:border-blue-500 cursor-pointer shadow-sm flex flex-col justify-between">
                                <h3 className="font-bold text-sm leading-tight">{i.name}</h3>
                                <div className="flex justify-between items-center mt-2">
-                                   <span className="font-black text-slate-900">₹{i.price.toFixed(0)}</span>
+                                   <span className="font-black text-slate-900">₹{(Number(i.price) || 0).toFixed(0)}</span>
                                    <Plus size={16} className="text-blue-600"/>
                                </div>
                            </div>
@@ -252,21 +251,21 @@ const POS: React.FC<POSProps> = ({ orders, menuItems, onPlaceOrder, onUpdateOrde
                            <div key={i.id} className="p-3 bg-slate-50 border rounded-xl relative group">
                                <div className="flex justify-between">
                                    <span className="font-bold text-sm">{i.name} {i.portion !== 'Full' && `(${i.portion})`}</span>
-                                   <span className="font-bold">₹{(i.priceAtOrder * i.quantity).toFixed(0)}</span>
+                                   <span className="font-bold">₹{(Number(i.priceAtOrder) * Number(i.quantity)).toFixed(0)}</span>
                                </div>
                                <div className="flex justify-between items-center mt-2">
                                    <button onClick={() => setCurrentCart(currentCart.filter(x => x.id !== i.id))} className="text-red-500"><Trash2 size={14}/></button>
                                    <div className="flex items-center gap-3 bg-white px-2 py-1 rounded-lg border">
-                                       <button onClick={() => setCurrentCart(currentCart.map(x => x.id === i.id ? {...x, quantity: Math.max(1, x.quantity-1)} : x))}><Minus size={14}/></button>
+                                       <button onClick={() => setCurrentCart(currentCart.map(x => x.id === i.id ? {...x, quantity: Math.max(1, Number(x.quantity)-1)} : x))}><Minus size={14}/></button>
                                        <span className="font-bold text-xs">{i.quantity}</span>
-                                       <button onClick={() => setCurrentCart(currentCart.map(x => x.id === i.id ? {...x, quantity: x.quantity+1} : x))}><Plus size={14}/></button>
+                                       <button onClick={() => setCurrentCart(currentCart.map(x => x.id === i.id ? {...x, quantity: Number(x.quantity)+1} : x))}><Plus size={14}/></button>
                                    </div>
                                </div>
                            </div>
                        ))}
                    </div>
                    <div className="p-4 bg-white border-t space-y-3">
-                       <div className="flex justify-between font-black text-xl"><span>Total</span><span>₹{repairItems(currentCart).reduce((a,c) => a + (c.priceAtOrder * c.quantity), 0).toFixed(0)}</span></div>
+                       <div className="flex justify-between font-black text-xl"><span>Total</span><span>₹{(Number(repairItems(currentCart).reduce((a,c) => a + (Number(c.priceAtOrder) * Number(c.quantity)), 0)) || 0).toFixed(0)}</span></div>
                        <div className="grid grid-cols-2 gap-2">
                            <button onClick={() => setShowPaymentOptions(true)} className="py-3 bg-green-600 text-white font-bold rounded-xl shadow-lg">Pay Now</button>
                            <button onClick={handleKitchenSend} className="py-3 bg-blue-600 text-white font-bold rounded-xl shadow-lg">KDS {orderSentSuccess ? '✓' : 'Send'}</button>
@@ -298,12 +297,12 @@ const POS: React.FC<POSProps> = ({ orders, menuItems, onPlaceOrder, onUpdateOrde
                    {printOrder.items.map((i, idx) => (
                        <div key={idx} className="flex justify-between mb-1">
                            <span>{i.name} x{i.quantity}</span>
-                           <span>₹{(i.priceAtOrder * i.quantity).toFixed(0)}</span>
+                           <span>₹{(Number(i.priceAtOrder) * Number(i.quantity)).toFixed(0)}</span>
                        </div>
                    ))}
                    <div className="border-t-2 border-dashed border-black pt-2 mt-4 font-black text-lg flex justify-between">
                        <span>TOTAL</span>
-                       <span>₹{getOrderTotal(printOrder).toFixed(2)}</span>
+                       <span>₹{(Number(getOrderTotal(printOrder)) || 0).toFixed(2)}</span>
                    </div>
                    <button onClick={() => window.print()} className="mt-8 w-full py-2 bg-black text-white font-bold rounded print-hidden">Print Receipt</button>
                    <button onClick={() => setShowPrintModal(false)} className="mt-2 w-full py-1 text-slate-400 print-hidden">Close</button>
