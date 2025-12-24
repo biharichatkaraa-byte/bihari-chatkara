@@ -40,6 +40,7 @@ const AiAssistant: React.FC<AiAssistantProps> = ({ contextData }) => {
 
     try {
       const response = await chatWithRestaurantData(contextData, userMsg);
+      // Fix: Attribution of AI response to the 'ai' role.
       setMessages(prev => [...prev, { role: 'ai', text: response }]);
     } catch (error) {
       setMessages(prev => [...prev, { role: 'ai', text: "Sorry, I encountered an error processing your request." }]);

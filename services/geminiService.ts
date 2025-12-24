@@ -1,12 +1,12 @@
 import { GoogleGenAI, Type } from "@google/genai";
 import { MenuItem, Ingredient } from "../types";
 
-// Always initialize with process.env.API_KEY using named parameter.
+// The API key is obtained exclusively from the environment variable process.env.API_KEY
+// The bundler (Vite) replaces this with a string literal during build.
 const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
 
 /**
  * Generates culinary insights for a menu item using Gemini 3 Flash.
- * Includes appetite-whetting description, dietary tags, and pricing guidance.
  */
 export const generateMenuInsights = async (
   item: MenuItem,
@@ -52,8 +52,9 @@ export const generateMenuInsights = async (
   });
 
   try {
-    // Extract text output from GenerateContentResponse using the .text property.
-    return JSON.parse(response.text || "{}");
+    // Accessing response.text as a property, not a method, as per guidelines.
+    const text = response.text || "{}";
+    return JSON.parse(text);
   } catch (e) {
     console.error("Gemini Response Parsing Error:", e);
     return {
@@ -71,7 +72,6 @@ export const chatWithRestaurantData = async (
   contextData: any,
   userMessage: string
 ): Promise<string> => {
-    // System instruction is provided via config for Gemini 3 series.
     const response = await ai.models.generateContent({
       model: 'gemini-3-flash-preview',
       contents: `Context (Orders, Inventory, Staff): ${JSON.stringify(contextData)}
@@ -82,11 +82,11 @@ export const chatWithRestaurantData = async (
       }
     });
 
-    return response.text || "I'm sorry, I'm currently unable to process your request. Please check the system logs.";
+    return response.text || "I'm sorry, I'm currently unable to process your request.";
 };
 
 /**
- * Generates detailed recipes for chefs using Gemini 3 Pro for advanced culinary reasoning.
+ * Generates detailed recipes for chefs using Gemini 3 Pro.
  */
 export const generateChefRecipe = async (
   dishName: string,
@@ -98,9 +98,9 @@ export const generateChefRecipe = async (
       Focus on high-volume consistency and authentic Bihari flavor profiles. 
       Include Mise-en-place, precise steps, and Chef's secrets.`,
       config: {
-        thinkingConfig: { thinkingBudget: 2000 } // Reserve thinking budget for complex culinary steps
+        thinkingConfig: { thinkingBudget: 2000 }
       }
     });
 
-    return response.text || "Recipe generation failed. Please try again with a specific dish name.";
+    return response.text || "Recipe generation failed.";
 };
