@@ -1,3 +1,4 @@
+
 import 'dotenv/config';
 import express from 'express';
 import cors from 'cors';
@@ -18,6 +19,7 @@ const DB_CONFIG = {
     waitForConnections: true,
     connectionLimit: 20, 
     queueLimit: 0,
+    timezone: '+00:00' // Force driver to treat dates as UTC
 };
 
 if (process.env.INSTANCE_CONNECTION_NAME) {
@@ -35,6 +37,10 @@ const initDb = async () => {
     let connection;
     try {
         connection = await pool.getConnection();
+        
+        // Ensure the database session uses UTC to match ISO strings from the frontend
+        await connection.query("SET time_zone = '+00:00'");
+
         const ensureTable = async (name, query) => {
             await connection.query(query);
             console.log(`[SYS-DB] Table Verified: '${name}'`);
@@ -228,9 +234,11 @@ api.post('/orders', async (req, res) => {
     const connection = await pool.getConnection();
     try {
         await connection.beginTransaction();
+        // Use the Date object directly to let the driver handle UTC conversion correctly
+        const createdAt = new Date(o.createdAt);
         await connection.query(
             'INSERT INTO orders (id, table_number, server_name, status, payment_status, payment_method, created_at, tax_rate, discount) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)', 
-            [o.id, o.tableNumber, o.serverName, o.status, o.paymentStatus, o.paymentMethod || null, new Date(o.createdAt).toISOString().slice(0, 19).replace('T', ' '), o.taxRate || 0, o.discount || 0]
+            [o.id, o.tableNumber, o.serverName, o.status, o.paymentStatus, o.paymentMethod || null, createdAt, o.taxRate || 0, o.discount || 0]
         );
         for (const i of (o.items || [])) {
             await connection.query(
@@ -245,7 +253,7 @@ api.post('/orders', async (req, res) => {
 api.put('/orders/:id', async (req, res) => {
     const o = req.body;
     try {
-        const completedAt = o.completedAt ? new Date(o.completedAt).toISOString().slice(0, 19).replace('T', ' ') : null;
+        const completedAt = o.completedAt ? new Date(o.completedAt) : null;
         await pool.query(
             'UPDATE orders SET status = ?, payment_status = ?, payment_method = ?, completed_at = ?, discount = ?, tax_rate = ? WHERE id = ?', 
             [o.status, o.paymentStatus, o.paymentMethod, completedAt, o.discount || 0, o.taxRate || 0, req.params.id]
@@ -342,7 +350,7 @@ api.post('/expenses', async (req, res) => {
     try {
         await pool.query(
             'INSERT INTO expenses (id, description, amount, category, date, reported_by, receipt_image) VALUES (?,?,?,?,?,?,?)',
-            [e.id, e.description, e.amount, e.category, new Date(e.date).toISOString().slice(0, 19).replace('T', ' '), e.reportedBy, e.receiptImage]
+            [e.id, e.description, e.amount, e.category, new Date(e.date), e.reportedBy, e.receiptImage]
         );
         res.json({ success: true });
     } catch (err) { res.status(500).json({ error: err.message }); }
@@ -360,7 +368,7 @@ api.post('/requisitions', async (req, res) => {
     try {
         await pool.query(
             'INSERT INTO requisitions (id, ingredient_id, ingredient_name, quantity, unit, urgency, status, requested_by, requested_at, notes, estimated_unit_cost, preferred_supplier) VALUES (?,?,?,?,?,?,?,?,?,?,?,?)',
-            [r.id, r.ingredientId, r.ingredientName, r.quantity, r.unit, r.urgency, r.status, r.requestedBy, new Date(r.requestedAt).toISOString().slice(0, 19).replace('T', ' '), r.notes, r.estimatedUnitCost, r.preferredSupplier]
+            [r.id, r.ingredientId, r.ingredientName, r.quantity, r.unit, r.urgency, r.status, r.requestedBy, new Date(r.requestedAt), r.notes, r.estimatedUnitCost, r.preferredSupplier]
         );
         res.json({ success: true });
     } catch (err) { res.status(500).json({ error: err.message }); }
@@ -378,7 +386,7 @@ api.post('/customers', async (req, res) => {
     try {
         await pool.query(
             'INSERT INTO customers (id, name, phone, email, loyalty_points, total_visits, last_visit, notes) VALUES (?,?,?,?,?,?,?,?)',
-            [c.id, c.name, c.phone, c.email, c.loyalty_points, c.total_visits, new Date(c.lastVisit).toISOString().slice(0, 19).replace('T', ' '), c.notes]
+            [c.id, c.name, c.phone, c.email, c.loyalty_points, c.total_visits, new Date(c.lastVisit), c.notes]
         );
         res.json({ success: true });
     } catch (err) { res.status(500).json({ error: err.message }); }
