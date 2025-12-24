@@ -11,7 +11,6 @@ import Customers from './components/Customers';
 import Settings from './components/Settings';
 import OrderHistory from './components/OrderHistory';
 import Login from './components/Login';
-import AiAssistant from './components/AiAssistant';
 import { Order, OrderStatus, User, UserRole, Ingredient, Expense, RequisitionRequest, RequisitionStatus, MenuItem, Customer, PaymentMethod, PaymentStatus, LineItem } from './types';
 import { Menu, Wifi, WifiOff, RefreshCw } from 'lucide-react';
 import * as db from './services/db';
@@ -415,7 +414,6 @@ const App: React.FC = () => {
           {activeTab === 'settings' && <Settings />}
         </div>
       </main>
-      <AiAssistant contextData={{ orders, inventory: ingredients, menuItems }} />
     </div>
   );
 };

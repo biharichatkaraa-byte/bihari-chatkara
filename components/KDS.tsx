@@ -1,9 +1,7 @@
-
 import React, { useEffect, useState, useRef, useMemo } from 'react';
 import { Order, OrderStatus, MenuItem, UserRole } from '../types';
-import { Clock, CheckCircle, Flame, AlertCircle, Lock, AlertTriangle, ChefHat, BookOpen, X, Sparkles, Loader2, Info, BellRing, Volume2, VolumeX } from 'lucide-react';
+import { Clock, CheckCircle, Flame, AlertCircle, Lock, AlertTriangle, BellRing, Volume2, VolumeX, Loader2 } from 'lucide-react';
 import { formatDistanceToNow } from 'date-fns';
-import { generateChefRecipe } from '../services/geminiService';
 
 interface KDSProps {
   orders: Order[];
@@ -22,13 +20,6 @@ const KDS: React.FC<KDSProps> = ({ orders, updateOrderStatus, userRole, menuItem
   const audioCtxRef = useRef<AudioContext | null>(null);
   const [audioAllowed, setAudioAllowed] = useState<boolean>(false);
   
-  // Chef AI State
-  const [showRecipeModal, setShowRecipeModal] = useState(false);
-  const [recipeDish, setRecipeDish] = useState('');
-  const [recipeLang, setRecipeLang] = useState('English');
-  const [recipeResult, setRecipeResult] = useState('');
-  const [isGeneratingRecipe, setIsGeneratingRecipe] = useState(false);
-
   // Check for new orders strictly
   const hasNewOrders = useMemo(() => orders.some(o => o.status === OrderStatus.NEW), [orders]);
 
@@ -175,15 +166,6 @@ const KDS: React.FC<KDSProps> = ({ orders, updateOrderStatus, userRole, menuItem
       }
   };
 
-  const handleGenerateRecipe = async () => {
-      if (!recipeDish) return;
-      setIsGeneratingRecipe(true);
-      setRecipeResult('');
-      const result = await generateChefRecipe(recipeDish, recipeLang);
-      setRecipeResult(result);
-      setIsGeneratingRecipe(false);
-  };
-
   // Filter active orders: Not SERVED and Not CANCELLED
   const activeOrders = orders
     .filter(o => o.status !== OrderStatus.SERVED && o.status !== OrderStatus.CANCELLED)
@@ -226,13 +208,6 @@ const KDS: React.FC<KDSProps> = ({ orders, updateOrderStatus, userRole, menuItem
                     </div>
                 )}
             </div>
-            
-            <button 
-                onClick={() => setShowRecipeModal(true)}
-                className="bg-indigo-600 text-white px-4 py-2 rounded-lg font-bold flex items-center gap-2 hover:bg-indigo-700 shadow-md transition-all active:scale-95"
-            >
-                <Sparkles size={18} className="text-yellow-300" /> Chef Recipe AI
-            </button>
         </div>
 
         <div className="flex-1 overflow-x-auto">
@@ -284,7 +259,7 @@ const KDS: React.FC<KDSProps> = ({ orders, updateOrderStatus, userRole, menuItem
                                          Size: {item.portion || 'Full'}
                                      </span>
                                      {hasModifiers && (
-                                         <Info size={14} className="text-amber-500" />
+                                         <AlertCircle size={14} className="text-amber-500" />
                                      )}
                                 </div>
                                 {hasModifiers && item.modifiers!.map((mod, idx) => (
@@ -374,79 +349,6 @@ const KDS: React.FC<KDSProps> = ({ orders, updateOrderStatus, userRole, menuItem
                         >
                             Confirm & Update
                         </button>
-                    </div>
-                </div>
-            </div>
-        )}
-
-        {/* CHEF RECIPE AI MODAL */}
-        {showRecipeModal && (
-            <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-sm animate-in fade-in p-4">
-                <div className="bg-white rounded-2xl shadow-2xl w-full max-w-2xl max-h-[90vh] flex flex-col">
-                    <div className="p-6 border-b border-slate-100 flex justify-between items-center bg-gradient-to-r from-indigo-50 to-white rounded-t-2xl">
-                        <div className="flex items-center gap-3">
-                            <div className="bg-indigo-100 p-2 rounded-lg text-indigo-600">
-                                <ChefHat size={28} />
-                            </div>
-                            <div>
-                                <h3 className="text-xl font-bold text-slate-800">Chef's Recipe Assistant</h3>
-                                <p className="text-sm text-slate-500">Instant preparation guides in any language</p>
-                            </div>
-                        </div>
-                        <button onClick={() => setShowRecipeModal(false)} className="text-slate-400 hover:text-slate-600 transition-colors">
-                            <X size={24} />
-                        </button>
-                    </div>
-
-                    <div className="p-6 flex-1 overflow-y-auto">
-                        <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
-                            <div className="md:col-span-2">
-                                <label className="block text-sm font-bold text-slate-700 mb-1">Dish Name</label>
-                                <input 
-                                    type="text" 
-                                    value={recipeDish}
-                                    onChange={(e) => setRecipeDish(e.target.value)}
-                                    placeholder="e.g. Chicken Tikka Masala, Risotto"
-                                    className="w-full px-4 py-3 border border-slate-300 rounded-xl focus:ring-2 focus:ring-indigo-500 shadow-sm"
-                                />
-                            </div>
-                            <div>
-                                <label className="block text-sm font-bold text-slate-700 mb-1">Language</label>
-                                <select 
-                                    value={recipeLang}
-                                    onChange={(e) => setRecipeLang(e.target.value)}
-                                    className="w-full px-4 py-3 border border-slate-300 rounded-xl focus:ring-2 focus:ring-indigo-500 shadow-sm"
-                                >
-                                    <option value="English">English</option>
-                                    <option value="Hindi">Hindi</option>
-                                    <option value="Spanish">Spanish</option>
-                                    <option value="French">French</option>
-                                    <option value="Bengali">Bengali</option>
-                                    <option value="Mandarin">Mandarin</option>
-                                    <option value="Arabic">Arabic</option>
-                                </select>
-                            </div>
-                        </div>
-
-                        <button 
-                            onClick={handleGenerateRecipe}
-                            disabled={!recipeDish || isGeneratingRecipe}
-                            className="w-full py-3 bg-indigo-600 text-white font-bold rounded-xl hover:bg-indigo-700 shadow-lg shadow-indigo-200 disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2 mb-6"
-                        >
-                            {isGeneratingRecipe ? <Loader2 size={20} className="animate-spin" /> : <BookOpen size={20} />}
-                            {isGeneratingRecipe ? 'Consulting Knowledge Base...' : 'Generate Recipe'}
-                        </button>
-
-                        {recipeResult && (
-                            <div className="bg-slate-50 p-6 rounded-xl border border-slate-200 prose prose-slate max-w-none">
-                                <h4 className="text-lg font-bold text-slate-800 mb-2 border-b border-slate-200 pb-2">
-                                    Recipe for: <span className="text-indigo-600">{recipeDish}</span>
-                                </h4>
-                                <div className="whitespace-pre-wrap text-slate-700 text-sm leading-relaxed font-medium">
-                                    {recipeResult}
-                                </div>
-                            </div>
-                        )}
                     </div>
                 </div>
             </div>

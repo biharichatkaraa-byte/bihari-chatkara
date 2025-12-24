@@ -1,11 +1,11 @@
-@tailwind base;
-@tailwind components;
-@tailwind utilities;
+/* Standard CSS - Tailwind is handled by the CDN script in index.html */
 
 /* Saturation Guard - Prevents "Black and White" rendering issues */
 html, body, #root {
   filter: saturate(1.1) !important;
   height: 100%;
+  margin: 0;
+  padding: 0;
 }
 
 /* Custom Scrollbar */

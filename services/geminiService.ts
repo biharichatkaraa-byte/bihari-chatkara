@@ -1,9 +1,17 @@
 import { GoogleGenAI, Type } from "@google/genai";
 import { MenuItem, Ingredient } from "../types";
 
-// The API key is obtained exclusively from the environment variable process.env.API_KEY
-// The bundler (Vite) replaces this with a string literal during build.
-const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
+// Safe API key access to prevent browser ReferenceErrors
+const getApiKey = () => {
+    try {
+        return process.env.API_KEY || "";
+    } catch (e) {
+        return "";
+    }
+};
+
+const apiKey = getApiKey();
+const ai = new GoogleGenAI({ apiKey: apiKey || "TEMPORARY_KEY" });
 
 /**
  * Generates culinary insights for a menu item using Gemini 3 Flash.
@@ -12,6 +20,10 @@ export const generateMenuInsights = async (
   item: MenuItem,
   ingredients: Ingredient[]
 ): Promise<{ description: string; dietaryTags: string[]; suggestedPriceRange: string }> => {
+  if (!apiKey) {
+      throw new Error("Gemini API Key is missing. Please check your environment variables.");
+  }
+
   const prompt = `Analyze this menu item for "Bihari Chatkara" restaurant:
   Name: ${item.name}
   Base Price: ₹${item.price}
@@ -52,7 +64,6 @@ export const generateMenuInsights = async (
   });
 
   try {
-    // Accessing response.text as a property, not a method, as per guidelines.
     const text = response.text || "{}";
     return JSON.parse(text);
   } catch (e) {
@@ -72,6 +83,8 @@ export const chatWithRestaurantData = async (
   contextData: any,
   userMessage: string
 ): Promise<string> => {
+    if (!apiKey) return "AI Service is currently offline (API Key Missing).";
+
     const response = await ai.models.generateContent({
       model: 'gemini-3-flash-preview',
       contents: `Context (Orders, Inventory, Staff): ${JSON.stringify(contextData)}
@@ -92,6 +105,8 @@ export const generateChefRecipe = async (
   dishName: string,
   language: string
 ): Promise<string> => {
+    if (!apiKey) return "AI Service is currently offline (API Key Missing).";
+
     const response = await ai.models.generateContent({
       model: 'gemini-3-pro-preview',
       contents: `Generate a detailed professional restaurant recipe for "${dishName}" in ${language}. 
