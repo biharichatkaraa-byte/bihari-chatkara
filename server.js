@@ -19,7 +19,8 @@ const DB_CONFIG = {
     waitForConnections: true,
     connectionLimit: 20, 
     queueLimit: 0,
-    timezone: '+00:00' // Force driver to treat dates as UTC
+    timezone: '+00:00',
+    dateStrings: true // Return dates as strings to avoid driver-level timezone shifting
 };
 
 if (process.env.INSTANCE_CONNECTION_NAME) {
@@ -37,8 +38,6 @@ const initDb = async () => {
     let connection;
     try {
         connection = await pool.getConnection();
-        
-        // Ensure the database session uses UTC to match ISO strings from the frontend
         await connection.query("SET time_zone = '+00:00'");
 
         const ensureTable = async (name, query) => {
@@ -165,6 +164,7 @@ app.use(express.json({ limit: '15mb' }));
 
 const parseRow = (row, jsonFields = []) => {
     if (!row) return row;
+    const dateFields = ['created_at', 'completed_at', 'date', 'last_visit', 'requested_at'];
     const map = {
         'table_number': 'tableNumber', 'server_name': 'serverName', 'payment_status': 'paymentStatus', 'payment_method': 'paymentMethod',
         'created_at': 'createdAt', 'completed_at': 'completedAt', 'tax_rate': 'taxRate', 'price_at_order': 'priceAtOrder', 
@@ -181,6 +181,13 @@ const parseRow = (row, jsonFields = []) => {
     Object.keys(row).forEach(key => {
         const newKey = map[key] || key;
         let val = row[key];
+        
+        // Fix for timezones: If it's a date field coming from MySQL as "YYYY-MM-DD HH:MM:SS"
+        // we convert it to ISO format with Z (UTC) so the browser parses it correctly.
+        if (dateFields.includes(key) && val && typeof val === 'string' && !val.includes('T')) {
+            val = val.replace(' ', 'T') + 'Z';
+        }
+
         if (numericFields.includes(newKey)) val = val === null || val === undefined ? 0 : Number(val);
         final[newKey] = val;
     });
@@ -234,8 +241,7 @@ api.post('/orders', async (req, res) => {
     const connection = await pool.getConnection();
     try {
         await connection.beginTransaction();
-        // Use the Date object directly to let the driver handle UTC conversion correctly
-        const createdAt = new Date(o.createdAt);
+        const createdAt = new Date(o.createdAt).toISOString().slice(0, 19).replace('T', ' ');
         await connection.query(
             'INSERT INTO orders (id, table_number, server_name, status, payment_status, payment_method, created_at, tax_rate, discount) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)', 
             [o.id, o.tableNumber, o.serverName, o.status, o.paymentStatus, o.paymentMethod || null, createdAt, o.taxRate || 0, o.discount || 0]
@@ -253,7 +259,7 @@ api.post('/orders', async (req, res) => {
 api.put('/orders/:id', async (req, res) => {
     const o = req.body;
     try {
-        const completedAt = o.completedAt ? new Date(o.completedAt) : null;
+        const completedAt = o.completedAt ? new Date(o.completedAt).toISOString().slice(0, 19).replace('T', ' ') : null;
         await pool.query(
             'UPDATE orders SET status = ?, payment_status = ?, payment_method = ?, completed_at = ?, discount = ?, tax_rate = ? WHERE id = ?', 
             [o.status, o.paymentStatus, o.paymentMethod, completedAt, o.discount || 0, o.taxRate || 0, req.params.id]
@@ -348,9 +354,10 @@ api.get('/expenses', async (req, res) => {
 api.post('/expenses', async (req, res) => {
     const e = req.body;
     try {
+        const dt = new Date(e.date).toISOString().slice(0, 19).replace('T', ' ');
         await pool.query(
             'INSERT INTO expenses (id, description, amount, category, date, reported_by, receipt_image) VALUES (?,?,?,?,?,?,?)',
-            [e.id, e.description, e.amount, e.category, new Date(e.date), e.reportedBy, e.receiptImage]
+            [e.id, e.description, e.amount, e.category, dt, e.reportedBy, e.receiptImage]
         );
         res.json({ success: true });
     } catch (err) { res.status(500).json({ error: err.message }); }
@@ -366,9 +373,10 @@ api.get('/requisitions', async (req, res) => {
 api.post('/requisitions', async (req, res) => {
     const r = req.body;
     try {
+        const dt = new Date(r.requestedAt).toISOString().slice(0, 19).replace('T', ' ');
         await pool.query(
             'INSERT INTO requisitions (id, ingredient_id, ingredient_name, quantity, unit, urgency, status, requested_by, requested_at, notes, estimated_unit_cost, preferred_supplier) VALUES (?,?,?,?,?,?,?,?,?,?,?,?)',
-            [r.id, r.ingredientId, r.ingredientName, r.quantity, r.unit, r.urgency, r.status, r.requestedBy, new Date(r.requestedAt), r.notes, r.estimatedUnitCost, r.preferredSupplier]
+            [r.id, r.ingredientId, r.ingredientName, r.quantity, r.unit, r.urgency, r.status, r.requestedBy, dt, r.notes, r.estimatedUnitCost, r.preferredSupplier]
         );
         res.json({ success: true });
     } catch (err) { res.status(500).json({ error: err.message }); }
@@ -384,9 +392,10 @@ api.get('/customers', async (req, res) => {
 api.post('/customers', async (req, res) => {
     const c = req.body;
     try {
+        const dt = new Date(c.lastVisit).toISOString().slice(0, 19).replace('T', ' ');
         await pool.query(
             'INSERT INTO customers (id, name, phone, email, loyalty_points, total_visits, last_visit, notes) VALUES (?,?,?,?,?,?,?,?)',
-            [c.id, c.name, c.phone, c.email, c.loyalty_points, c.total_visits, new Date(c.lastVisit), c.notes]
+            [c.id, c.name, c.phone, c.email, c.loyalty_points, c.total_visits, dt, c.notes]
         );
         res.json({ success: true });
     } catch (err) { res.status(500).json({ error: err.message }); }
