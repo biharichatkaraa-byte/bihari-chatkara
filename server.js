@@ -1,4 +1,3 @@
-
 import 'dotenv/config';
 import express from 'express';
 import cors from 'cors';
@@ -20,7 +19,7 @@ const DB_CONFIG = {
     connectionLimit: 20, 
     queueLimit: 0,
     timezone: '+00:00',
-    dateStrings: true // Return dates as strings to avoid driver-level timezone shifting
+    dateStrings: true 
 };
 
 if (process.env.INSTANCE_CONNECTION_NAME) {
@@ -182,10 +181,13 @@ const parseRow = (row, jsonFields = []) => {
         const newKey = map[key] || key;
         let val = row[key];
         
-        // Fix for timezones: If it's a date field coming from MySQL as "YYYY-MM-DD HH:MM:SS"
-        // we convert it to ISO format with Z (UTC) so the browser parses it correctly.
-        if (dateFields.includes(key) && val && typeof val === 'string' && !val.includes('T')) {
-            val = val.replace(' ', 'T') + 'Z';
+        if (dateFields.includes(key) && val && typeof val === 'string') {
+            if (!val.includes('T')) {
+                val = val.replace(' ', 'T');
+            }
+            if (!val.includes('Z') && !val.includes('+')) {
+                val = val + 'Z';
+            }
         }
 
         if (numericFields.includes(newKey)) val = val === null || val === undefined ? 0 : Number(val);
