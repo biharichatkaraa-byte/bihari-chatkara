@@ -1,9 +1,23 @@
-
 import React, { useState, useMemo } from 'react';
 import { Expense, User } from '../types';
 import { Plus, Trash2, Calendar, Tag, Filter, TrendingDown, X, Search, ChevronDown, ChevronUp, PieChart as PieIcon, Download, Target, TrendingUp, DollarSign, Pencil, Package, Zap, Wrench, Users, Megaphone, ArrowUp, ArrowDown, ArrowUpDown, ChevronLeft, ChevronRight, Maximize2, Minimize2, Save, User as UserIcon, Upload, FileText, Image as ImageIcon, Eye } from 'lucide-react';
-import { format, subDays, isSameDay, startOfMonth, endOfMonth, isWithinInterval } from 'date-fns';
+// Fix: Removed missing subDays and startOfMonth from date-fns import
+import { format, isSameDay, endOfMonth, isWithinInterval } from 'date-fns';
 import { PieChart, Pie, Cell, Tooltip, Legend, ResponsiveContainer, BarChart, Bar, XAxis, YAxis, CartesianGrid } from 'recharts';
+
+// Helper functions to replace missing date-fns members
+const subDays = (date: any, amount: number) => {
+  const d = new Date(date);
+  d.setDate(d.getDate() - amount);
+  return d;
+};
+
+const startOfMonth = (date: any) => {
+  const d = new Date(date);
+  d.setDate(1);
+  d.setHours(0, 0, 0, 0);
+  return d;
+};
 
 interface ExpensesProps {
   expenses: Expense[];
@@ -66,7 +80,7 @@ const Expenses: React.FC<ExpensesProps> = ({ expenses, onAddExpense, onUpdateExp
 
   // Get unique reporters for filter
   const uniqueReporters = useMemo(() => {
-      const reporters = new Set(expenses.map(e => e.reportedBy));
+      const reporters = new Set((expenses || []).map(e => e.reportedBy));
       return Array.from(reporters).sort();
   }, [expenses]);
 
@@ -215,7 +229,7 @@ const Expenses: React.FC<ExpensesProps> = ({ expenses, onAddExpense, onUpdateExp
 
   // 1. Filter & Sort Logic
   const filteredExpenses = useMemo(() => {
-    let result = expenses.filter(expense => {
+    let result = (expenses || []).filter(expense => {
         const expenseDate = new Date(expense.date);
         expenseDate.setHours(0, 0, 0, 0);
 
@@ -241,7 +255,6 @@ const Expenses: React.FC<ExpensesProps> = ({ expenses, onAddExpense, onUpdateExp
         let aValue: any = a[sortConfig.key];
         let bValue: any = b[sortConfig.key];
 
-        // Handle string comparison case-insensitive
         if (typeof aValue === 'string') {
             aValue = aValue.toLowerCase();
             bValue = bValue.toLowerCase();
@@ -271,8 +284,7 @@ const Expenses: React.FC<ExpensesProps> = ({ expenses, onAddExpense, onUpdateExp
 
     const totalSpent = filteredExpenses.reduce((acc, curr) => acc + curr.amount, 0);
     
-    // Expenses strictly within current calendar month
-    const thisMonthExpenses = expenses.filter(e => 
+    const thisMonthExpenses = (expenses || []).filter(e => 
         isWithinInterval(new Date(e.date), { start: startOfMonthDate, end: endOfMonthDate })
     );
     const monthSpent = thisMonthExpenses.reduce((acc, curr) => acc + curr.amount, 0);
@@ -285,7 +297,6 @@ const Expenses: React.FC<ExpensesProps> = ({ expenses, onAddExpense, onUpdateExp
     };
   }, [filteredExpenses, expenses, monthlyBudget]);
 
-  // 3. Chart Data: Breakdown by Category
   const categoryData = useMemo(() => {
       const data: Record<string, number> = {};
       filteredExpenses.forEach(e => {
@@ -294,16 +305,15 @@ const Expenses: React.FC<ExpensesProps> = ({ expenses, onAddExpense, onUpdateExp
       return Object.keys(data).map(key => ({ name: key, value: data[key] }));
   }, [filteredExpenses]);
 
-  // 4. Chart Data: Last 7 Days Trend
   const trendData = useMemo(() => {
       const days = [];
       for (let i = 6; i >= 0; i--) {
           const d = subDays(new Date(), i);
-          const dayTotal = expenses
+          const dayTotal = (expenses || [])
               .filter(e => isSameDay(new Date(e.date), d))
               .reduce((sum, e) => sum + e.amount, 0);
           days.push({
-              name: format(d, 'EEE'), // Mon, Tue
+              name: format(d, 'EEE'),
               date: format(d, 'MMM dd'),
               amount: dayTotal
           });
@@ -333,8 +343,6 @@ const Expenses: React.FC<ExpensesProps> = ({ expenses, onAddExpense, onUpdateExp
 
   return (
     <div className="h-full flex flex-col space-y-4 relative">
-      
-      {/* Header & Controls */}
       <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 bg-white p-4 rounded-xl shadow-sm border border-slate-200">
         <div>
           <h2 className="text-2xl font-bold text-slate-800">Expense Management</h2>
@@ -383,10 +391,8 @@ const Expenses: React.FC<ExpensesProps> = ({ expenses, onAddExpense, onUpdateExp
         </div>
       </div>
 
-      {/* Analytics Dashboard (Collapsible) */}
       {!isExpandedView && (
         <div className="animate-in fade-in slide-in-from-top-4 duration-300 space-y-4">
-            {/* KPI Cards */}
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
                 <div className="bg-white p-4 rounded-xl shadow-sm border border-slate-200 flex flex-col justify-between">
                     <div className="flex justify-between items-start">
@@ -472,9 +478,7 @@ const Expenses: React.FC<ExpensesProps> = ({ expenses, onAddExpense, onUpdateExp
                 </div>
             </div>
 
-            {/* Analytics Charts Row */}
             <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 h-72">
-                {/* Category Pie Chart */}
                 <div className="bg-white p-4 rounded-xl shadow-sm border border-slate-200 flex flex-col">
                     <h3 className="font-bold text-slate-800 text-sm mb-4 flex items-center gap-2"><PieIcon size={16}/> Expense Distribution</h3>
                     <div className="flex-1 min-h-0">
@@ -504,7 +508,6 @@ const Expenses: React.FC<ExpensesProps> = ({ expenses, onAddExpense, onUpdateExp
                     </div>
                 </div>
 
-                {/* Daily Trend Bar Chart */}
                 <div className="lg:col-span-2 bg-white p-4 rounded-xl shadow-sm border border-slate-200 flex flex-col">
                     <h3 className="font-bold text-slate-800 text-sm mb-4 flex items-center gap-2"><TrendingUp size={16}/> Spending Trend (Last 7 Days)</h3>
                     <div className="flex-1 min-h-0">
@@ -527,7 +530,6 @@ const Expenses: React.FC<ExpensesProps> = ({ expenses, onAddExpense, onUpdateExp
         </div>
       )}
 
-      {/* Filter Panel */}
       {showFilters && (
         <div className="bg-slate-800 p-6 rounded-xl shadow-lg animate-in fade-in slide-in-from-top-2 text-white">
             <div className="flex justify-between items-center mb-4">
@@ -540,7 +542,6 @@ const Expenses: React.FC<ExpensesProps> = ({ expenses, onAddExpense, onUpdateExp
             </div>
             
             <div className="grid grid-cols-1 md:grid-cols-5 gap-4">
-                {/* Date Range */}
                 <div className="space-y-1">
                     <label className="text-xs font-semibold text-slate-400 uppercase">From Date</label>
                     <input 
@@ -560,7 +561,6 @@ const Expenses: React.FC<ExpensesProps> = ({ expenses, onAddExpense, onUpdateExp
                     />
                 </div>
 
-                {/* Category */}
                 <div className="space-y-1">
                     <label className="text-xs font-semibold text-slate-400 uppercase">Category</label>
                     <select 
@@ -573,7 +573,6 @@ const Expenses: React.FC<ExpensesProps> = ({ expenses, onAddExpense, onUpdateExp
                     </select>
                 </div>
 
-                {/* Reported By */}
                 <div className="space-y-1">
                     <label className="text-xs font-semibold text-slate-400 uppercase">Reported By</label>
                     <select 
@@ -586,7 +585,6 @@ const Expenses: React.FC<ExpensesProps> = ({ expenses, onAddExpense, onUpdateExp
                     </select>
                 </div>
 
-                {/* Amount Range */}
                 <div className="space-y-1">
                     <label className="text-xs font-semibold text-slate-400 uppercase">Amount Range (₹)</label>
                     <div className="flex gap-2">
@@ -619,7 +617,6 @@ const Expenses: React.FC<ExpensesProps> = ({ expenses, onAddExpense, onUpdateExp
         </div>
       )}
 
-      {/* Add/Edit Expense Form Modal */}
       {isAdding && (
           <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm animate-in fade-in">
              <div className="bg-white p-6 rounded-xl shadow-2xl w-full max-w-lg transform transition-all scale-100 max-h-[90vh] overflow-y-auto">
@@ -679,7 +676,6 @@ const Expenses: React.FC<ExpensesProps> = ({ expenses, onAddExpense, onUpdateExp
                         </div>
                     </div>
                     
-                    {/* Receipt Upload Section */}
                     <div>
                         <label className="block text-sm font-bold text-slate-700 mb-1">Payment Receipt / Screenshot</label>
                         <div className="mt-1 flex justify-center px-6 pt-5 pb-6 border-2 border-slate-300 border-dashed rounded-lg bg-slate-50 hover:bg-slate-100 transition-colors relative">
@@ -739,7 +735,6 @@ const Expenses: React.FC<ExpensesProps> = ({ expenses, onAddExpense, onUpdateExp
           </div>
       )}
 
-      {/* View Receipt Modal */}
       {viewReceiptImage && (
           <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm animate-in fade-in" onClick={() => setViewReceiptImage(null)}>
               <div className="relative max-w-3xl max-h-[90vh] bg-transparent p-4 outline-none" onClick={(e) => e.stopPropagation()}>
@@ -759,7 +754,6 @@ const Expenses: React.FC<ExpensesProps> = ({ expenses, onAddExpense, onUpdateExp
           </div>
       )}
 
-      {/* Expense Table */}
       <div className="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden flex-1 flex flex-col min-h-0">
         <div className="p-4 bg-slate-50 border-b border-slate-200 flex justify-between items-center">
             <h3 className="font-bold text-slate-700">Detailed Transaction Log</h3>
@@ -768,7 +762,6 @@ const Expenses: React.FC<ExpensesProps> = ({ expenses, onAddExpense, onUpdateExp
             </span>
         </div>
 
-        {/* Quick Add Bar */}
         <div className="bg-blue-50/50 p-3 border-b border-slate-200 flex flex-col md:flex-row gap-3 items-center">
              <div className="flex-1 w-full md:w-auto">
                  <input 
@@ -904,7 +897,6 @@ const Expenses: React.FC<ExpensesProps> = ({ expenses, onAddExpense, onUpdateExp
             </table>
         </div>
 
-        {/* Pagination Controls */}
         {filteredExpenses.length > ITEMS_PER_PAGE && (
             <div className="p-4 border-t border-slate-200 bg-white flex justify-between items-center">
                 <button 

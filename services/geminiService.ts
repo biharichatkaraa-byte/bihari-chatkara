@@ -1,17 +1,9 @@
+
 import { GoogleGenAI, Type } from "@google/genai";
 import { MenuItem, Ingredient } from "../types";
 
-// Safe API key access to prevent browser ReferenceErrors
-const getApiKey = () => {
-    try {
-        return process.env.API_KEY || "";
-    } catch (e) {
-        return "";
-    }
-};
-
-const apiKey = getApiKey();
-const ai = new GoogleGenAI({ apiKey: apiKey || "TEMPORARY_KEY" });
+// Always create a new instance within functions to ensure the most up-to-date API key is used
+// and adhere to the guideline of using process.env.API_KEY directly.
 
 /**
  * Generates culinary insights for a menu item using Gemini 3 Flash.
@@ -20,9 +12,8 @@ export const generateMenuInsights = async (
   item: MenuItem,
   ingredients: Ingredient[]
 ): Promise<{ description: string; dietaryTags: string[]; suggestedPriceRange: string }> => {
-  if (!apiKey) {
-      throw new Error("Gemini API Key is missing. Please check your environment variables.");
-  }
+  // Initialize AI client inside the function using process.env.API_KEY directly as per guidelines.
+  const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
 
   const prompt = `Analyze this menu item for "Bihari Chatkara" restaurant:
   Name: ${item.name}
@@ -64,6 +55,7 @@ export const generateMenuInsights = async (
   });
 
   try {
+    // Extracting text from response using the .text property
     const text = response.text || "{}";
     return JSON.parse(text);
   } catch (e) {
@@ -83,7 +75,8 @@ export const chatWithRestaurantData = async (
   contextData: any,
   userMessage: string
 ): Promise<string> => {
-    if (!apiKey) return "AI Service is currently offline (API Key Missing).";
+    // Initialize AI client inside the function using process.env.API_KEY directly.
+    const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
 
     const response = await ai.models.generateContent({
       model: 'gemini-3-flash-preview',
@@ -105,7 +98,8 @@ export const generateChefRecipe = async (
   dishName: string,
   language: string
 ): Promise<string> => {
-    if (!apiKey) return "AI Service is currently offline (API Key Missing).";
+    // Initialize AI client inside the function using process.env.API_KEY directly.
+    const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
 
     const response = await ai.models.generateContent({
       model: 'gemini-3-pro-preview',
@@ -113,7 +107,8 @@ export const generateChefRecipe = async (
       Focus on high-volume consistency and authentic Bihari flavor profiles. 
       Include Mise-en-place, precise steps, and Chef's secrets.`,
       config: {
-        thinkingConfig: { thinkingBudget: 2000 }
+        // Use max thinking budget for complex coding/reasoning tasks as recommended.
+        thinkingConfig: { thinkingBudget: 32768 }
       }
     });
 

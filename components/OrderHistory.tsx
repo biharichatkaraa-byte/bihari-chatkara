@@ -1,7 +1,7 @@
-
 import React, { useState, useMemo } from 'react';
 import { Order, OrderStatus, PaymentStatus, PaymentMethod } from '../types';
-import { format, isWithinInterval, startOfDay, endOfDay } from 'date-fns';
+// Fix: Removed missing startOfDay from date-fns import
+import { format, isWithinInterval, endOfDay } from 'date-fns';
 import { 
     Search, Download, ChevronLeft, ChevronRight, 
     ArrowUpDown, ArrowUp, ArrowDown, Eye, FileText, 
@@ -9,6 +9,13 @@ import {
     User, Hash, X, ArrowRight, Filter, MessageSquare, Tag, Info, Receipt, 
     Banknote, Smartphone, CreditCard, Printer, TrendingUp, DollarSign, Calendar, FileSpreadsheet, QrCode
 } from 'lucide-react';
+
+// Helper function to replace missing date-fns member
+const startOfDay = (date: any) => {
+  const d = new Date(date);
+  d.setHours(0, 0, 0, 0);
+  return d;
+};
 
 interface OrderHistoryProps {
   orders: Order[];
@@ -29,7 +36,8 @@ const OrderHistory: React.FC<OrderHistoryProps> = ({ orders }) => {
   const [selectedOrder, setSelectedOrder] = useState<Order | null>(null);
 
   const getOrderTotal = (order: Order) => {
-      const subtotal = order.items.reduce((acc, item) => acc + (Number(item.priceAtOrder) * Number(item.quantity)), 0);
+      const items = order.items || [];
+      const subtotal = items.reduce((acc, item) => acc + (Number(item.priceAtOrder) * Number(item.quantity)), 0);
       const discount = Number(order.discount || 0);
       const taxable = Math.max(0, subtotal - discount);
       const taxAmount = taxable * ((Number(order.taxRate) || 0) / 100);
@@ -37,7 +45,8 @@ const OrderHistory: React.FC<OrderHistoryProps> = ({ orders }) => {
   };
 
   const getOrderSubtotal = (order: Order) => {
-      return order.items.reduce((acc, item) => acc + (Number(item.priceAtOrder) * Number(item.quantity)), 0);
+      const items = order.items || [];
+      return items.reduce((acc, item) => acc + (Number(item.priceAtOrder) * Number(item.quantity)), 0);
   };
 
   const getOrderTax = (order: Order) => {
@@ -47,7 +56,7 @@ const OrderHistory: React.FC<OrderHistoryProps> = ({ orders }) => {
   };
 
   const processedOrders = useMemo(() => {
-      let data = [...orders];
+      let data = [...(orders || [])];
       
       // Search
       if (searchTerm) {
@@ -56,7 +65,7 @@ const OrderHistory: React.FC<OrderHistoryProps> = ({ orders }) => {
               o.id.toLowerCase().includes(lowerTerm) || 
               o.serverName.toLowerCase().includes(lowerTerm) || 
               o.tableNumber.toString().includes(lowerTerm) ||
-              o.items.some(i => i.name?.toLowerCase().includes(lowerTerm))
+              (o.items || []).some(i => i.name?.toLowerCase().includes(lowerTerm))
           );
       }
 
@@ -93,7 +102,6 @@ const OrderHistory: React.FC<OrderHistoryProps> = ({ orders }) => {
       });
   }, [orders, searchTerm, filterStatus, filterPaymentMethod, filterDateStart, filterDateEnd, sortConfig]);
 
-  // Totals for the summary bar
   const summary = useMemo(() => {
       return processedOrders.reduce((acc, order) => {
           if (order.paymentStatus === PaymentStatus.PAID) {
@@ -113,7 +121,6 @@ const OrderHistory: React.FC<OrderHistoryProps> = ({ orders }) => {
       switch (method) {
           case PaymentMethod.CASH: return <Banknote size={14} className="text-emerald-600" />;
           case PaymentMethod.UPI: return <QrCode size={14} className="text-blue-600" />;
-          // Fix: Changed PAYTM_POS to POS to match the enum definition in types.ts.
           case PaymentMethod.POS: return <Smartphone size={14} className="text-indigo-600" />;
           case PaymentMethod.ONLINE: return <CreditCard size={14} className="text-purple-600" />;
           default: return <Clock size={14} className="text-slate-400" />;
@@ -124,7 +131,7 @@ const OrderHistory: React.FC<OrderHistoryProps> = ({ orders }) => {
     const headers = "Order ID,Date,Table,Server,Items,Subtotal,Discount,Tax,Total,Method,Status\n";
     const csvContent = processedOrders.map(o => {
         const date = format(new Date(o.createdAt), 'yyyy-MM-dd HH:mm');
-        const items = o.items.map(i => `${i.quantity}x ${i.name}`).join('; ');
+        const items = (o.items || []).map(i => `${i.quantity}x ${i.name}`).join('; ');
         const subtotal = getOrderSubtotal(o);
         const discount = o.discount || 0;
         const tax = getOrderTax(o);
@@ -142,7 +149,6 @@ const OrderHistory: React.FC<OrderHistoryProps> = ({ orders }) => {
 
   return (
     <div className="h-full flex flex-col space-y-4">
-        {/* Financial Summary Bar */}
         <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
             <div className="bg-white p-4 rounded-2xl border-2 border-slate-100 shadow-sm">
                 <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1">Journal Revenue</p>
@@ -174,7 +180,6 @@ const OrderHistory: React.FC<OrderHistoryProps> = ({ orders }) => {
             </div>
         </div>
 
-        {/* Search & Filters */}
         <div className="bg-white p-4 rounded-2xl border-2 border-slate-100 shadow-sm flex flex-wrap gap-4 items-end">
             <div className="flex-1 min-w-[200px]">
                 <label className="block text-[10px] font-black text-slate-400 uppercase mb-1">Search Orders</label>
@@ -230,7 +235,6 @@ const OrderHistory: React.FC<OrderHistoryProps> = ({ orders }) => {
             </div>
         </div>
 
-        {/* Ledger Table */}
         <div className="bg-white rounded-2xl border-2 border-slate-100 flex-1 overflow-hidden flex flex-col shadow-sm">
             <div className="overflow-x-auto flex-1">
                 <table className="w-full text-left border-collapse">
@@ -269,10 +273,10 @@ const OrderHistory: React.FC<OrderHistoryProps> = ({ orders }) => {
                                     </td>
                                     <td className="px-6 py-4">
                                         <div className="max-w-[180px]">
-                                            <p className="text-xs font-bold text-slate-700 truncate" title={order.items.map(i => i.name).join(', ')}>
-                                                {order.items.map(i => i.name).join(', ')}
+                                            <p className="text-xs font-bold text-slate-700 truncate" title={(order.items || []).map(i => i.name).join(', ')}>
+                                                {(order.items || []).map(i => i.name).join(', ')}
                                             </p>
-                                            <p className="text-[9px] text-slate-400 uppercase font-black">{order.items.length} dishes</p>
+                                            <p className="text-[9px] text-slate-400 uppercase font-black">{(order.items || []).length} dishes</p>
                                         </div>
                                     </td>
                                     <td className="px-6 py-4">
@@ -304,7 +308,6 @@ const OrderHistory: React.FC<OrderHistoryProps> = ({ orders }) => {
                 </table>
             </div>
 
-            {/* Pagination */}
             {totalPages > 1 && (
                 <div className="p-4 border-t-2 border-slate-50 flex justify-between items-center bg-slate-50/50">
                     <button 
@@ -326,7 +329,6 @@ const OrderHistory: React.FC<OrderHistoryProps> = ({ orders }) => {
             )}
         </div>
 
-        {/* Enhanced Receipt Modal */}
         {selectedOrder && (
             <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/80 backdrop-blur-sm p-4 animate-in fade-in">
                 <div className="bg-white rounded-3xl w-full max-w-lg shadow-2xl overflow-hidden animate-in zoom-in-95">
@@ -339,7 +341,6 @@ const OrderHistory: React.FC<OrderHistoryProps> = ({ orders }) => {
                     </div>
                     
                     <div className="p-6 space-y-6 max-h-[70vh] overflow-y-auto no-scrollbar">
-                        {/* Meta */}
                         <div className="grid grid-cols-2 gap-4 pb-6 border-b border-dashed border-slate-200">
                             <div>
                                 <p className="text-[10px] font-black text-slate-400 uppercase mb-1">Server</p>
@@ -359,10 +360,9 @@ const OrderHistory: React.FC<OrderHistoryProps> = ({ orders }) => {
                             </div>
                         </div>
 
-                        {/* Items */}
                         <div className="space-y-3">
                             <h4 className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Dish Breakdown</h4>
-                            {selectedOrder.items.map((item, idx) => (
+                            {(selectedOrder.items || []).map((item, idx) => (
                                 <div key={idx} className="flex justify-between items-start bg-slate-50 p-3 rounded-xl">
                                     <div className="flex items-start gap-3">
                                         <span className="w-6 h-6 bg-white border border-slate-200 rounded flex items-center justify-center text-xs font-black">{item.quantity}</span>
@@ -376,7 +376,6 @@ const OrderHistory: React.FC<OrderHistoryProps> = ({ orders }) => {
                             ))}
                         </div>
 
-                        {/* Final Calc */}
                         <div className="bg-slate-900 rounded-2xl p-6 text-white space-y-2 relative overflow-hidden">
                             <div className="flex justify-between text-slate-400 text-sm">
                                 <span>Subtotal</span>

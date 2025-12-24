@@ -2,9 +2,23 @@ import React, { useState, useMemo, useEffect } from 'react';
 import { AreaChart, Area, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid, PieChart, Pie, Cell, Legend } from 'recharts';
 import { Order, Expense, MenuItem, Ingredient, PaymentStatus, PaymentMethod } from '../types';
 import { Activity, Banknote, Smartphone, ShoppingBag, TrendingUp, TrendingDown, PieChart as PieChartIcon } from 'lucide-react';
-import { startOfDay, endOfDay, isWithinInterval, format, subDays } from 'date-fns';
+// Fix: Removed missing startOfDay and subDays from date-fns import
+import { endOfDay, isWithinInterval, format } from 'date-fns';
 import * as db from '../services/db';
 import { APP_DATA_VERSION } from '../constants';
+
+// Helper functions to replace missing date-fns members
+const startOfDay = (date: any) => {
+  const d = new Date(date);
+  d.setHours(0, 0, 0, 0);
+  return d;
+};
+
+const subDays = (date: any, amount: number) => {
+  const d = new Date(date);
+  d.setDate(d.getDate() - amount);
+  return d;
+};
 
 interface DashboardProps {
   orders: Order[];
@@ -31,7 +45,8 @@ const Dashboard: React.FC<DashboardProps> = ({ orders, expenses = [], allData, u
   }, []);
 
   const calculateOrderTotal = (order: Order) => {
-    const subtotal = order.items.reduce((sum, i) => sum + (Number(i.priceAtOrder) * Number(i.quantity)), 0);
+    const items = order.items || [];
+    const subtotal = items.reduce((sum, i) => sum + (Number(i.priceAtOrder) * Number(i.quantity)), 0);
     const taxable = Math.max(0, subtotal - (Number(order.discount) || 0));
     const taxAmount = taxable * ((Number(order.taxRate) || 0) / 100);
     return taxable + taxAmount;
@@ -46,8 +61,8 @@ const Dashboard: React.FC<DashboardProps> = ({ orders, expenses = [], allData, u
       return { start: startOfDay(now), end: endOfDay(now) };
     })();
 
-    const filteredOrders = orders.filter(o => isWithinInterval(new Date(o.createdAt), { start, end }));
-    const filteredExpenses = expenses.filter(e => isWithinInterval(new Date(e.date), { start, end }));
+    const filteredOrders = (orders || []).filter(o => isWithinInterval(new Date(o.createdAt), { start, end }));
+    const filteredExpenses = (expenses || []).filter(e => isWithinInterval(new Date(e.date), { start, end }));
     return { orders: filteredOrders, expenses: filteredExpenses };
   }, [orders, expenses, filterType]);
 
@@ -104,7 +119,6 @@ const Dashboard: React.FC<DashboardProps> = ({ orders, expenses = [], allData, u
         </div>
       </div>
 
-      {/* KPI GRID - Explicitly showing the 4 requested metrics */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
         <div className="bg-white p-6 rounded-2xl border-2 border-slate-50 shadow-sm transition-transform hover:scale-[1.02]">
           <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2 flex items-center gap-1">
