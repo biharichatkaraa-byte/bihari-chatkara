@@ -1,7 +1,7 @@
+
 import React, { useState, useEffect, useRef, useMemo } from 'react';
-import { MenuItem, Ingredient } from '../types';
-import { generateMenuInsights } from '../services/geminiService';
-import { Calculator, Sparkles, ChefHat, Tag, DollarSign, Package, AlertTriangle, Search, Save, RotateCcw, Check, FileUp, Download, ArrowUpDown, ArrowUp, ArrowDown, Filter, Square, CheckSquare, Edit3, X, Plus, Trash2, Pencil, Power, Ban, CheckCircle2, Link, Unlink, ScanLine, Camera, Loader2, Image as ImageIcon } from 'lucide-react';
+import { MenuItem, Ingredient, MenuItemIngredient } from '../types';
+import { Plus, Trash2, Edit3, Save, X, FileSpreadsheet, Package, AlertTriangle, Search, ChevronRight, Check, Ban, ShoppingBag, DollarSign, Download, Trash, CheckSquare, Square } from 'lucide-react';
 
 interface InventoryProps {
   ingredients: Ingredient[];
@@ -17,38 +17,11 @@ interface InventoryProps {
   onBulkAddMenuItems: (items: MenuItem[]) => void;
 }
 
-type SortKey = keyof Ingredient | 'totalValue';
-type SortDirection = 'asc' | 'desc';
-type FilterStatus = 'all' | 'low' | 'in_stock';
-
-const mockDetectBillItems = (existingIngredients: Ingredient[]) => {
-    return new Promise<{ detected: Partial<Ingredient>[] }>((resolve) => {
-        setTimeout(() => {
-            const randomExisting = existingIngredients.length > 0 ? existingIngredients[Math.floor(Math.random() * existingIngredients.length)] : null;
-            const items: Partial<Ingredient>[] = [
-                { name: 'Tomatoes', stockQuantity: 5, unit: 'kg', unitCost: 40, category: 'Produce' },
-                { name: 'Refined Oil', stockQuantity: 10, unit: 'l', unitCost: 120, category: 'Pantry' },
-                { name: 'Premium Rice', stockQuantity: 25, unit: 'kg', unitCost: 80, category: 'Pantry' }
-            ];
-            if (randomExisting) {
-                items.push({ 
-                    id: randomExisting.id,
-                    name: randomExisting.name, 
-                    stockQuantity: 10, 
-                    unit: randomExisting.unit, 
-                    unitCost: randomExisting.unitCost, 
-                    category: randomExisting.category 
-                });
-            }
-            resolve({ detected: items });
-        }, 2000);
-    });
-};
-
 const Inventory: React.FC<InventoryProps> = ({ 
     ingredients, 
     menuItems, 
     onSave, 
+    // Fix: Destructure missing onDeleteIngredient and onBulkUpdateMenuItems from props
     onDeleteIngredient,
     onAddIngredient,
     onAddMenuItem,
@@ -60,314 +33,548 @@ const Inventory: React.FC<InventoryProps> = ({
 }) => {
   const [activeView, setActiveView] = useState<'menu' | 'stock'>('menu');
   const [selectedItem, setSelectedItem] = useState<MenuItem | null>(null);
-  const [aiInsights, setAiInsights] = useState<{ description: string; dietaryTags: string[]; suggestedPriceRange: string } | null>(null);
-  const [isLoadingAi, setIsLoadingAi] = useState(false);
-  const [showAddMenuModal, setShowAddMenuModal] = useState(false);
-  const [recipeIngId, setRecipeIngId] = useState<string>('');
-  const [recipeQty, setRecipeQty] = useState<string>('');
-  const [selectedMenuIds, setSelectedMenuIds] = useState<Set<string>>(new Set());
-  const [showEditMenuModal, setShowEditMenuModal] = useState(false);
-  const [editMenuData, setEditMenuData] = useState<Partial<MenuItem>>({});
-  const [bulkMenuCategory, setBulkMenuCategory] = useState('');
-  const menuFileInputRef = useRef<HTMLInputElement>(null);
-  const [newMenuName, setNewMenuName] = useState('');
-  const [newMenuPrice, setNewMenuPrice] = useState('');
-  const [newMenuCategory, setNewMenuCategory] = useState('');
-  const [newMenuSubCategory, setNewMenuSubCategory] = useState('');
-  const [newMenuPortionQuarter, setNewMenuPortionQuarter] = useState('');
-  const [newMenuPortionHalf, setNewMenuPortionHalf] = useState('');
-  const [newMenuPortionFull, setNewMenuPortionFull] = useState('');
-  const [localIngredients, setLocalIngredients] = useState<Ingredient[]>(ingredients);
   const [searchTerm, setSearchTerm] = useState('');
-  const [hasUnsavedChanges, setHasUnsavedChanges] = useState(false);
-  const [showSaveSuccess, setShowSaveSuccess] = useState(false);
-  const [showAddIngredientModal, setShowAddIngredientModal] = useState(false);
+  
+  // Selection state for bulk actions
+  const [selectedMenuIds, setSelectedMenuIds] = useState<Set<string>>(new Set());
+
+  // Modal States
+  const [showAddMenuModal, setShowAddMenuModal] = useState(false);
+  const [showAddIngModal, setShowAddIngModal] = useState(false);
+
+  // Form States (Menu)
+  const [menuName, setMenuName] = useState('');
+  const [menuFullPrice, setMenuFullPrice] = useState('');
+  const [menuHalfPrice, setMenuHalfPrice] = useState('');
+  const [menuQuarterPrice, setMenuQuarterPrice] = useState('');
+  const [menuCategory, setMenuCategory] = useState('Main Course');
+  const [menuDescription, setMenuDescription] = useState('');
+  
+  // Form States (Ingredient)
+  const [ingName, setIngName] = useState('');
+  const [ingUnit, setIngUnit] = useState('kg');
+  const [ingCost, setIngCost] = useState('');
+  const [ingStock, setIngStock] = useState('');
+
+  // Recipe Editor States
+  const [recipeIngId, setRecipeIngId] = useState('');
+  const [recipeQty, setRecipeQty] = useState('');
+
   const fileInputRef = useRef<HTMLInputElement>(null);
-  const [editIngId, setEditIngId] = useState<string | null>(null);
-  const [newIngName, setNewIngName] = useState('');
-  const [newIngCategory, setNewIngCategory] = useState('');
-  const [newIngUnit, setNewIngUnit] = useState('kg');
-  const [newIngCost, setNewIngCost] = useState('');
-  const [newIngQty, setNewIngQty] = useState('');
-  const [newIngBarcode, setNewIngBarcode] = useState('');
-  const [isScanning, setIsScanning] = useState(false);
-  const [showBillModal, setShowBillModal] = useState(false);
-  const [billFile, setBillFile] = useState<string | null>(null);
-  const [isProcessingBill, setIsProcessingBill] = useState(false);
-  const [detectedBillItems, setDetectedBillItems] = useState<Partial<Ingredient>[]>([]);
-  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
-  const [bulkQty, setBulkQty] = useState<string>('');
-  const [bulkCost, setBulkCost] = useState<string>('');
-  const [sortConfig, setSortConfig] = useState<{ key: SortKey; direction: SortDirection }>({ key: 'name', direction: 'asc' });
-  const [filterStatus, setFilterStatus] = useState<FilterStatus>('all');
-  const [filterCategory, setFilterCategory] = useState<string>('all');
-  const [filterUnit, setFilterUnit] = useState<string>('all');
+  const menuFileInputRef = useRef<HTMLInputElement>(null);
 
-  useEffect(() => {
-    if (!hasUnsavedChanges) {
-        setLocalIngredients(ingredients);
-    }
-  }, [ingredients, hasUnsavedChanges]);
-
-  useEffect(() => {
-      if (isScanning && showAddIngredientModal) {
-          const timer = setTimeout(() => {
-              // @ts-ignore
-              if (window.Html5QrcodeScanner) {
-                  // @ts-ignore
-                  const scanner = new window.Html5QrcodeScanner("reader", { fps: 10, qrbox: { width: 250, height: 250 } }, false);
-                  const onScanSuccess = (decodedText: string, decodedResult: any) => {
-                      handleScanMatch(decodedText);
-                      scanner.clear();
-                      setIsScanning(false);
-                  };
-                  const onScanFailure = (error: any) => {};
-                  scanner.render(onScanSuccess, onScanFailure);
-              }
-          }, 100);
-          return () => clearTimeout(timer);
+  // Robust CSV Parser
+  const parseCSV = (text: string) => {
+    const lines = text.split(/\r?\n/);
+    return lines.map(line => {
+      const result = [];
+      let current = '';
+      let inQuotes = false;
+      for (let i = 0; i < line.length; i++) {
+        const char = line[i];
+        if (char === '"') inQuotes = !inQuotes;
+        else if (char === ',' && !inQuotes) {
+          result.push(current.trim());
+          current = '';
+        } else current += char;
       }
-  }, [isScanning, showAddIngredientModal]);
+      result.push(current.trim());
+      return result;
+    });
+  };
 
-  const handleScanMatch = (barcode: string) => {
-      const existing = ingredients.find(i => i.barcode === barcode);
-      if (existing) {
-          setEditIngId(existing.id);
-          setNewIngName(existing.name);
-          setNewIngCategory(existing.category || '');
-          setNewIngUnit(existing.unit);
-          setNewIngCost(existing.unitCost.toString());
-          setNewIngQty(existing.stockQuantity.toString());
-          setNewIngBarcode(existing.barcode || '');
+  const handleBulkUpload = (e: React.ChangeEvent<HTMLInputElement>, type: 'ing' | 'menu') => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = (ev) => {
+      const text = ev.target?.result as string;
+      const rows = parseCSV(text);
+      
+      if (type === 'ing') {
+        const newItems: Ingredient[] = rows.slice(1).filter(r => r[0]).map(parts => ({
+          id: `i-bulk-${Math.random().toString(36).substr(2, 9)}`,
+          name: parts[0],
+          category: parts[1] || 'General',
+          unit: parts[2] || 'kg',
+          unitCost: Number(parts[3]) || 0,
+          stockQuantity: Number(parts[4]) || 0
+        }));
+        onSave([...ingredients, ...newItems]);
       } else {
-          setNewIngBarcode(barcode);
+        // Expected Menu CSV: Name, Category, Full Price, Half Price, Quarter Price, Description
+        const newItems: MenuItem[] = rows.slice(1).filter(r => r[0]).map(parts => ({
+          id: `m-bulk-${Math.random().toString(36).substr(2, 9)}`,
+          name: parts[0],
+          category: parts[1] || 'Main',
+          price: Number(parts[2]) || 0,
+          portionPrices: {
+              full: Number(parts[2]) || 0,
+              half: parts[3] ? Number(parts[3]) : undefined,
+              quarter: parts[4] ? Number(parts[4]) : undefined
+          },
+          description: parts[5] || '',
+          ingredients: [],
+          available: true
+        }));
+        onBulkAddMenuItems(newItems);
       }
+      alert(`Imported successfully.`);
+    };
+    reader.readAsText(file);
   };
 
-  const handleStartAddIngredient = () => {
-      setEditIngId(null); setNewIngName(''); setNewIngCategory(''); setNewIngUnit('kg'); setNewIngCost(''); setNewIngQty(''); setNewIngBarcode('');
-      setIsScanning(false); setShowAddIngredientModal(true);
+  const downloadMenuCSV = () => {
+    const headers = "Name,Category,Full Price,Half Price,Quarter Price,Description\n";
+    const csvContent = menuItems.map(m => {
+        const full = m.price || m.portionPrices?.full || 0;
+        const half = m.portionPrices?.half || '';
+        const quarter = m.portionPrices?.quarter || '';
+        const desc = (m.description || '').replace(/,/g, ';');
+        return `"${m.name}","${m.category}",${full},${half},${quarter},"${desc}"`;
+    }).join("\n");
+
+    const blob = new Blob([headers + csvContent], { type: 'text/csv' });
+    const url = window.URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `menu_catalog_${new Date().toISOString().split('T')[0]}.csv`;
+    a.click();
   };
 
-  const handleEditSingleIngredient = (ing: Ingredient) => {
-      setEditIngId(ing.id); setNewIngName(ing.name); setNewIngCategory(ing.category || ''); setNewIngUnit(ing.unit);
-      setNewIngCost(ing.unitCost.toString()); setNewIngQty(ing.stockQuantity.toString()); setNewIngBarcode(ing.barcode || '');
-      setShowAddIngredientModal(true);
+  const handleToggleSelect = (id: string, e: React.MouseEvent) => {
+    e.stopPropagation();
+    const next = new Set(selectedMenuIds);
+    if (next.has(id)) next.delete(id);
+    else next.add(id);
+    setSelectedMenuIds(next);
   };
 
-  const handleAddOrUpdateIngredient = () => {
-    if(!newIngName || !newIngCost) return;
-    if (editIngId) {
-        const updates = { name: newIngName, category: newIngCategory, unit: newIngUnit, unitCost: parseFloat(newIngCost), stockQuantity: parseFloat(newIngQty) || 0, barcode: newIngBarcode };
-        handleLocalUpdate(editIngId, updates);
-        onSave(ingredients.map(i => i.id === editIngId ? { ...i, ...updates } : i));
-    } else {
-        const newIngredient: Ingredient = { id: `i-${Date.now()}`, name: newIngName, category: newIngCategory || 'General', unit: newIngUnit, unitCost: parseFloat(newIngCost), stockQuantity: parseFloat(newIngQty) || 0, barcode: newIngBarcode };
-        onAddIngredient(newIngredient);
-        setLocalIngredients(prev => [...prev, newIngredient]);
+  const handleBulkDelete = () => {
+    if (selectedMenuIds.size === 0) return;
+    if (confirm(`Delete ${selectedMenuIds.size} selected menu items?`)) {
+      onBulkDeleteMenuItems(Array.from(selectedMenuIds));
+      setSelectedMenuIds(new Set());
+      setSelectedItem(null);
     }
-    setShowAddIngredientModal(false);
   };
 
-  const handleBillUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
-      const file = e.target.files?.[0];
-      if (file) {
-          const reader = new FileReader();
-          reader.onload = (ev) => { setBillFile(ev.target?.result as string); setShowBillModal(true); processBillImage(); };
-          reader.readAsDataURL(file);
-      }
+  const handleSingleDelete = (id: string, e: React.MouseEvent) => {
+    e.stopPropagation();
+    if (confirm("Delete this menu item?")) {
+      onDeleteMenuItem(id);
+      if (selectedItem?.id === id) setSelectedItem(null);
+    }
   };
-
-  const processBillImage = async () => {
-      setIsProcessingBill(true);
-      try { const result = await mockDetectBillItems(ingredients); setDetectedBillItems(result.detected); } catch (e) {} finally { setIsProcessingBill(false); }
-  };
-
-  const availableCategories = useMemo(() => Array.from(new Set(localIngredients.map(i => i.category).filter(Boolean))).sort() as string[], [localIngredients]);
-  const availableUnits = useMemo(() => Array.from(new Set(localIngredients.map(i => i.unit))).sort(), [localIngredients]);
 
   const calculatePlateCost = (item: MenuItem): number => {
-    let totalCost = 0;
-    item.ingredients.forEach(ref => {
-      const ingredient = ingredients.find(i => i.id === ref.ingredientId);
-      if (ingredient) { totalCost += Number(ingredient.unitCost) * Number(ref.quantity); }
-    });
-    return totalCost;
+    return (item.ingredients || []).reduce((total, ref) => {
+      const ing = ingredients.find(i => i.id === ref.ingredientId);
+      return total + (Number(ing?.unitCost || 0) * Number(ref.quantity || 0));
+    }, 0);
   };
 
-  const handleAddIngredientToRecipe = () => {
-      if (!selectedItem || !recipeIngId || !recipeQty) return;
-      const qty = parseFloat(recipeQty);
-      if (isNaN(qty) || qty <= 0) return;
-      const updatedItem = { ...selectedItem };
-      updatedItem.ingredients = updatedItem.ingredients.filter(i => i.ingredientId !== recipeIngId);
-      updatedItem.ingredients.push({ ingredientId: recipeIngId, quantity: qty });
-      onUpdateMenuItem(updatedItem);
-      setSelectedItem(updatedItem);
-      setRecipeIngId(''); setRecipeQty('');
-  };
+  const addIngredientToRecipe = () => {
+    if (!selectedItem || !recipeIngId || !recipeQty) return;
+    const qty = parseFloat(recipeQty);
+    if (isNaN(qty)) return;
 
-  const handleLocalUpdate = (id: string, updates: Partial<Ingredient>) => {
-    setLocalIngredients(prev => prev.map(ing => ing.id === id ? { ...ing, ...updates } : ing));
-    setHasUnsavedChanges(true); setShowSaveSuccess(false);
-  };
-
-  const handleSaveChanges = () => { onSave(localIngredients); setHasUnsavedChanges(false); setShowSaveSuccess(true); setTimeout(() => setShowSaveSuccess(false), 3000); };
-  const handleResetChanges = () => { setLocalIngredients(ingredients); setHasUnsavedChanges(false); setShowSaveSuccess(false); setSelectedIds(new Set()); };
-
-  const handleAddMenuItem = () => {
-      if(!newMenuName) return;
-      const full = parseFloat(newMenuPortionFull);
-      const half = parseFloat(newMenuPortionHalf);
-      const quarter = parseFloat(newMenuPortionQuarter);
-      const manualPrice = parseFloat(newMenuPrice);
-      const newItem: MenuItem = {
-          id: `m-${Date.now()}`, name: newMenuName, category: newMenuCategory || 'Specials', subCategory: newMenuSubCategory,
-          price: !isNaN(full) && full > 0 ? full : (!isNaN(manualPrice) ? manualPrice : 0),
-          portionPrices: { full: !isNaN(full) ? full : undefined, half: !isNaN(half) ? half : undefined, quarter: !isNaN(quarter) ? quarter : undefined },
-          ingredients: [], description: 'Manually added item', tags: [], available: true
-      };
-      onAddMenuItem(newItem); setShowAddMenuModal(false);
-  };
-
-  const processedIngredients = useMemo(() => {
-    let data = [...localIngredients];
-    if (searchTerm) {
-      const lowerTerm = searchTerm.toLowerCase();
-      data = data.filter(i => i.name.toLowerCase().includes(lowerTerm) || i.id.toLowerCase().includes(lowerTerm));
+    const updatedIngredients = [...(selectedItem.ingredients || [])];
+    const existingIdx = updatedIngredients.findIndex(i => i.ingredientId === recipeIngId);
+    
+    if (existingIdx > -1) {
+      updatedIngredients[existingIdx].quantity += qty;
+    } else {
+      updatedIngredients.push({ ingredientId: recipeIngId, quantity: qty });
     }
-    if (filterStatus === 'low') data = data.filter(i => Number(i.stockQuantity) < 50);
-    else if (filterStatus === 'in_stock') data = data.filter(i => Number(i.stockQuantity) >= 50);
-    if (filterCategory !== 'all') data = data.filter(i => i.category === filterCategory);
-    if (filterUnit !== 'all') data = data.filter(i => i.unit === filterUnit);
 
-    return data.sort((a, b) => {
-      let aValue: any = a[sortConfig.key as keyof Ingredient];
-      let bValue: any = b[sortConfig.key as keyof Ingredient];
-      if (sortConfig.key === 'totalValue') { aValue = Number(a.unitCost) * Number(a.stockQuantity); bValue = Number(b.unitCost) * Number(b.stockQuantity); }
-      if (typeof aValue === 'string') aValue = aValue.toLowerCase();
-      if (typeof bValue === 'string') bValue = bValue.toLowerCase();
-      if (aValue < bValue) return sortConfig.direction === 'asc' ? -1 : 1;
-      if (aValue > bValue) return sortConfig.direction === 'asc' ? 1 : -1;
-      return 0;
-    });
-  }, [localIngredients, searchTerm, filterStatus, filterCategory, filterUnit, sortConfig]);
-
-  const totalInventoryValue = localIngredients.reduce((acc, ing) => acc + (Number(ing.unitCost) * Number(ing.stockQuantity)), 0);
-  const lowStockCount = localIngredients.filter(i => Number(i.stockQuantity) < 50).length;
-
-  const handleMenuEditSave = () => {
-      if (!editMenuData.id || !editMenuData.name || editMenuData.price === undefined) return;
-      const original = menuItems.find(m => m.id === editMenuData.id);
-      if (!original) return;
-      const updatedItem: MenuItem = { ...original, name: editMenuData.name, category: editMenuData.category || 'General', price: Number(editMenuData.price), description: editMenuData.description };
-      onUpdateMenuItem(updatedItem); setShowEditMenuModal(false); if (selectedItem?.id === updatedItem.id) setSelectedItem(updatedItem);
+    const updatedItem = { ...selectedItem, ingredients: updatedIngredients };
+    onUpdateMenuItem(updatedItem);
+    setSelectedItem(updatedItem);
+    setRecipeQty('');
   };
+
+  const removeIngredientFromRecipe = (ingId: string) => {
+    if (!selectedItem) return;
+    const updatedIngredients = selectedItem.ingredients.filter(i => i.ingredientId !== ingId);
+    const updatedItem = { ...selectedItem, ingredients: updatedIngredients };
+    onUpdateMenuItem(updatedItem);
+    setSelectedItem(updatedItem);
+  };
+
+  const toggleItemAvailability = (item: MenuItem) => {
+    onUpdateMenuItem({ ...item, available: !item.available });
+    if (selectedItem?.id === item.id) setSelectedItem({ ...item, available: !item.available });
+  };
+
+  const handleAddIngredient = (e: React.FormEvent) => {
+    e.preventDefault();
+    const newIng: Ingredient = {
+      id: `i-20250125-${Date.now()}`,
+      name: ingName,
+      unit: ingUnit,
+      unitCost: parseFloat(ingCost) || 0,
+      stockQuantity: parseFloat(ingStock) || 0,
+      category: 'General'
+    };
+    onAddIngredient(newIng);
+    setShowAddIngModal(false);
+    setIngName(''); setIngCost(''); setIngStock('');
+  };
+
+  const handleAddMenu = (e: React.FormEvent) => {
+    e.preventDefault();
+    const full = parseFloat(menuFullPrice) || 0;
+    const half = parseFloat(menuHalfPrice);
+    const quarter = parseFloat(menuQuarterPrice);
+
+    const newItem: MenuItem = {
+      id: `m-${Date.now()}`,
+      name: menuName,
+      category: menuCategory,
+      price: full,
+      portionPrices: {
+          full: full,
+          half: isNaN(half) ? undefined : half,
+          quarter: isNaN(quarter) ? undefined : quarter
+      },
+      description: menuDescription,
+      available: true,
+      ingredients: []
+    };
+    onAddMenuItem(newItem);
+    setShowAddMenuModal(false);
+    // Reset form
+    setMenuName(''); setMenuFullPrice(''); setMenuHalfPrice(''); setMenuQuarterPrice(''); setMenuDescription('');
+  };
+
+  const filteredIngredients = ingredients.filter(i => i.name.toLowerCase().includes(searchTerm.toLowerCase()));
+  const filteredMenuItems = menuItems.filter(i => i.name.toLowerCase().includes(searchTerm.toLowerCase()));
 
   return (
-    <div className="h-full flex flex-col space-y-4 relative">
-      <input type="file" accept=".csv" ref={fileInputRef} onChange={handleBillUpload} className="hidden" />
-      <input type="file" accept=".csv" ref={menuFileInputRef} onChange={handleBillUpload} className="hidden" />
-      
-      <div className="flex flex-col md:flex-row justify-between items-start md:items-center bg-white p-2 md:p-4 rounded-xl shadow-sm border border-slate-200 gap-4">
-        <div className="flex space-x-2 overflow-x-auto w-full md:w-auto">
-          <button onClick={() => setActiveView('menu')} className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors whitespace-nowrap ${activeView === 'menu' ? 'bg-blue-600 text-white shadow-md' : 'text-slate-600 hover:bg-slate-100'}`}>Menu Analysis & Costing</button>
-          <button onClick={() => setActiveView('stock')} className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors whitespace-nowrap ${activeView === 'stock' ? 'bg-blue-600 text-white shadow-md' : 'text-slate-600 hover:bg-slate-100'}`}>Bulk Inventory System</button>
+    <div className="h-full flex flex-col space-y-4">
+      {/* View Switcher & Actions */}
+      <div className="bg-white p-4 rounded-xl shadow-sm border border-slate-200 flex flex-wrap justify-between items-center gap-4">
+        <div className="flex bg-slate-100 p-1 rounded-lg">
+          <button onClick={() => setActiveView('menu')} className={`px-4 py-2 rounded-md text-sm font-bold transition-all ${activeView === 'menu' ? 'bg-white shadow text-blue-600' : 'text-slate-500'}`}>Menu Analytics</button>
+          <button onClick={() => setActiveView('stock')} className={`px-4 py-2 rounded-md text-sm font-bold transition-all ${activeView === 'stock' ? 'bg-white shadow text-blue-600' : 'text-slate-500'}`}>Inventory Stock</button>
         </div>
-        <div className="flex flex-wrap items-center gap-4 px-2 md:px-4 w-full md:w-auto">
-             <div className="flex items-center gap-2 text-sm text-slate-600 bg-slate-50 px-3 py-1.5 rounded-lg border border-slate-100 w-full md:w-auto">
-                <Package size={16} className="text-blue-500" />
-                <span>Total Value: <span className="font-bold text-slate-900">₹{(Number(totalInventoryValue) || 0).toLocaleString('en-IN')}</span></span>
-             </div>
-             {lowStockCount > 0 && <div className="flex items-center gap-2 text-sm text-red-600 bg-red-50 px-3 py-1.5 rounded-lg border border-red-100 animate-pulse w-full md:w-auto"><AlertTriangle size={16} /><span className="font-bold">{lowStockCount} Items Low Stock</span></div>}
+
+        <div className="flex items-center gap-2">
+          <div className="relative">
+            <Search className="absolute left-3 top-2.5 text-slate-400" size={16} />
+            <input type="text" placeholder="Search catalog..." value={searchTerm} onChange={e => setSearchTerm(e.target.value)} className="pl-9 pr-4 py-2 border rounded-lg text-sm focus:ring-2 focus:ring-blue-500 outline-none" />
+          </div>
+          
+          <div className="flex border-l pl-2 gap-2">
+            <button onClick={() => (activeView === 'menu' ? menuFileInputRef : fileInputRef).current?.click()} className="p-2 border border-slate-200 rounded-lg text-slate-600 hover:bg-slate-50" title="Upload CSV">
+                <FileSpreadsheet size={18} />
+            </button>
+            {activeView === 'menu' && (
+                <>
+                    <button onClick={downloadMenuCSV} className="p-2 border border-slate-200 rounded-lg text-slate-600 hover:bg-slate-50" title="Download Menu CSV">
+                        <Download size={18} />
+                    </button>
+                    {selectedMenuIds.size > 0 && (
+                        <button onClick={handleBulkDelete} className="p-2 border border-red-100 bg-red-50 text-red-600 rounded-lg hover:bg-red-100" title="Delete Selected">
+                            <Trash size={18} />
+                        </button>
+                    )}
+                </>
+            )}
+          </div>
+
+          <button onClick={() => activeView === 'menu' ? setShowAddMenuModal(true) : setShowAddIngModal(true)} className="bg-blue-600 text-white px-4 py-2 rounded-lg text-sm font-bold flex items-center gap-2 ml-2">
+            <Plus size={18} /> Add {activeView === 'menu' ? 'Item' : 'Ingredient'}
+          </button>
         </div>
       </div>
 
       {activeView === 'menu' ? (
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 flex-1 overflow-hidden">
-          <div className="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden flex flex-col relative">
-            <div className="p-4 border-b border-slate-100 bg-slate-50 flex flex-wrap justify-between items-center gap-2">
-                <h2 className="font-bold text-lg text-slate-800">Menu Items</h2>
-                <button onClick={() => setShowAddMenuModal(true)} className="bg-blue-600 text-white p-1.5 rounded hover:bg-blue-700 transition-colors shadow"><Plus size={16} /></button>
+          {/* Left Panel: Menu List */}
+          <div className="bg-white rounded-xl border border-slate-200 flex flex-col overflow-hidden">
+            <div className="p-4 border-b border-slate-100 bg-slate-50 font-bold text-slate-700 flex justify-between items-center">
+                <span>Menu Catalog ({filteredMenuItems.length})</span>
+                {selectedMenuIds.size > 0 && <span className="text-xs bg-red-100 text-red-600 px-2 py-0.5 rounded-full">{selectedMenuIds.size} Selected</span>}
             </div>
-            <div className="overflow-y-auto flex-1 p-2">
-                {menuItems.map(item => {
-                    const cost = Number(calculatePlateCost(item) || 0);
-                    const itemPrice = Number(item.price || 0);
-                    const margin = itemPrice > 0 ? ((itemPrice - cost) / itemPrice) * 100 : 0;
-                    return (
-                        <div key={item.id} onClick={() => { setSelectedItem(item); setAiInsights(null); }} className={`p-4 mb-2 rounded-lg cursor-pointer border transition-all relative ${selectedItem?.id === item.id ? 'bg-blue-50 border-blue-500 shadow-md' : 'bg-white border-slate-100 hover:border-blue-300'}`}>
-                            <div className="flex justify-between items-start mb-2">
-                                <div>
-                                    <h3 className="font-bold text-slate-800">{item.name}</h3>
-                                    <p className="text-xs text-slate-500">{item.category}</p>
-                                </div>
-                                <span className="font-mono font-bold text-slate-900">₹{(Number(item.price) || 0).toFixed(2)}</span>
-                            </div>
-                            <div className="grid grid-cols-3 gap-2 mt-3 text-sm">
-                                <div className="bg-white p-2 rounded border border-slate-200"><p className="text-xs text-slate-400 uppercase">Plate Cost</p><p className="font-bold text-slate-700">₹{cost.toFixed(2)}</p></div>
-                                <div className="bg-white p-2 rounded border border-slate-200"><p className="text-xs text-slate-400 uppercase">Profit</p><p className="font-bold text-green-600">₹{(itemPrice - cost).toFixed(2)}</p></div>
-                                <div className="bg-white p-2 rounded border border-slate-200"><p className="text-xs text-slate-400 uppercase">Margin</p><p className={`font-bold ${margin < 65 ? 'text-red-500' : 'text-slate-700'}`}>{margin.toFixed(0)}%</p></div>
-                            </div>
+            <div className="flex-1 overflow-y-auto p-2 space-y-2">
+              {filteredMenuItems.map(item => {
+                const cost = calculatePlateCost(item);
+                const margin = item.price > 0 ? ((item.price - cost) / item.price) * 100 : 0;
+                const isSelected = selectedMenuIds.has(item.id);
+                return (
+                  <div key={item.id} onClick={() => setSelectedItem(item)} className={`p-4 rounded-lg border cursor-pointer transition-all relative ${selectedItem?.id === item.id ? 'border-blue-500 bg-blue-50 shadow-sm' : 'border-slate-100 hover:border-slate-300 bg-white'}`}>
+                    <div className="flex justify-between items-start">
+                      <div className="flex items-start gap-3">
+                        <div onClick={(e) => handleToggleSelect(item.id, e)} className="mt-1 text-slate-400 hover:text-blue-600">
+                            {isSelected ? <CheckSquare size={20} className="text-blue-600" /> : <Square size={20} />}
                         </div>
-                    );
-                })}
+                        <div>
+                          <div className="flex items-center gap-2">
+                            <h3 className="font-bold text-slate-800">{item.name}</h3>
+                            {!item.available && <span className="text-[10px] bg-red-100 text-red-600 px-1.5 py-0.5 rounded font-black uppercase">Sold Out</span>}
+                          </div>
+                          <p className="text-xs text-slate-500">{item.category}</p>
+                        </div>
+                      </div>
+                      <div className="flex flex-col items-end">
+                        <span className="font-black text-slate-900">₹{Number(item.price).toFixed(0)}</span>
+                        <button onClick={(e) => handleSingleDelete(item.id, e)} className="mt-2 p-1.5 text-slate-300 hover:text-red-500 hover:bg-red-50 rounded transition-colors">
+                            <Trash2 size={14} />
+                        </button>
+                      </div>
+                    </div>
+                    <div className="grid grid-cols-3 gap-2 mt-3 text-center ml-8">
+                       <div className="bg-slate-50 p-1.5 rounded border border-slate-100">
+                          <p className="text-[9px] text-slate-400 uppercase font-bold">Cost</p>
+                          <p className="text-xs font-bold text-slate-700">₹{cost.toFixed(0)}</p>
+                       </div>
+                       <div className="bg-slate-50 p-1.5 rounded border border-slate-100">
+                          <p className="text-[9px] text-slate-400 uppercase font-bold">Profit</p>
+                          <p className="text-xs font-bold text-green-600">₹{(item.price - cost).toFixed(0)}</p>
+                       </div>
+                       <div className="bg-slate-50 p-1.5 rounded border border-slate-100">
+                          <p className="text-[9px] text-slate-400 uppercase font-bold">Margin</p>
+                          <p className={`text-xs font-bold ${margin < 65 ? 'text-orange-500' : 'text-blue-600'}`}>{margin.toFixed(0)}%</p>
+                       </div>
+                    </div>
+                  </div>
+                )
+              })}
             </div>
           </div>
 
-          <div className="bg-white rounded-xl shadow-sm border border-slate-200 flex flex-col p-6 overflow-y-auto relative">
+          {/* Right Panel: Recipe & Controls */}
+          <div className="bg-white rounded-xl border border-slate-200 flex flex-col overflow-hidden">
             {selectedItem ? (
-                <>
-                    <h2 className="text-2xl font-bold text-slate-800 mb-6">{selectedItem.name}</h2>
-                    <div className="bg-slate-50 rounded-lg p-4 border border-slate-100 space-y-2 mb-6">
-                        {selectedItem.ingredients.map((ref, idx) => {
-                            const ing = ingredients.find(i => i.id === ref.ingredientId);
-                            if (!ing) return null;
-                            const lineCost = Number(ing.unitCost) * Number(ref.quantity);
-                            return (
-                                <div key={idx} className="flex justify-between items-center text-sm border-b border-slate-200 pb-2">
-                                    <span>{ref.quantity} {ing.unit} {ing.name} (@ ₹{(Number(ing.unitCost) || 0).toFixed(2)})</span>
-                                    <span className="font-mono text-slate-600">₹{lineCost.toFixed(2)}</span>
-                                </div>
-                            )
-                        })}
-                        <div className="flex justify-between font-bold pt-2 text-slate-800 border-t border-slate-300 mt-2">
-                            <span>Total Plate Cost</span>
-                            <span>₹{(Number(calculatePlateCost(selectedItem)) || 0).toFixed(2)}</span>
+              <div className="flex flex-col h-full">
+                <div className="p-6 border-b border-slate-100 flex justify-between items-center">
+                  <div>
+                    <h2 className="text-2xl font-black text-slate-800">{selectedItem.name}</h2>
+                    <p className="text-slate-500">Recipe & Costing Analysis</p>
+                  </div>
+                  <button 
+                    onClick={() => toggleItemAvailability(selectedItem)}
+                    className={`flex items-center gap-2 px-4 py-2 rounded-lg font-bold text-sm transition-colors ${selectedItem.available ? 'bg-red-50 text-red-600 hover:bg-red-100' : 'bg-green-50 text-green-600 hover:bg-green-100'}`}
+                  >
+                    {selectedItem.available ? <Ban size={16}/> : <Check size={16}/>}
+                    {selectedItem.available ? 'Mark Out' : 'Mark In'}
+                  </button>
+                </div>
+                
+                <div className="flex-1 overflow-y-auto p-6 space-y-6">
+                  {/* Portion Overview */}
+                  <div className="bg-slate-50 rounded-xl p-4 border border-slate-100">
+                    <h4 className="text-xs font-black text-slate-400 uppercase tracking-widest mb-3">Portion Pricing</h4>
+                    <div className="grid grid-cols-3 gap-4">
+                        <div className="text-center">
+                            <p className="text-[10px] text-slate-500 uppercase">Full</p>
+                            <p className="font-black text-slate-800">₹{selectedItem.portionPrices?.full || selectedItem.price}</p>
+                        </div>
+                        <div className="text-center border-x border-slate-200">
+                            <p className="text-[10px] text-slate-500 uppercase">Half</p>
+                            <p className="font-black text-slate-800">{selectedItem.portionPrices?.half ? `₹${selectedItem.portionPrices.half}` : '-'}</p>
+                        </div>
+                        <div className="text-center">
+                            <p className="text-[10px] text-slate-500 uppercase">Quarter</p>
+                            <p className="font-black text-slate-800">{selectedItem.portionPrices?.quarter ? `₹${selectedItem.portionPrices.quarter}` : '-'}</p>
                         </div>
                     </div>
-                </>
+                  </div>
+
+                  {/* Current Ingredients */}
+                  <div>
+                    <h4 className="text-xs font-black text-slate-400 uppercase tracking-widest mb-4">Mapped Ingredients</h4>
+                    <div className="space-y-2">
+                      {selectedItem.ingredients.length === 0 ? (
+                        <div className="bg-slate-50 p-6 rounded-xl text-center text-slate-400 border border-dashed border-slate-200">
+                          No ingredients mapped to this recipe yet.
+                        </div>
+                      ) : (
+                        selectedItem.ingredients.map(ref => {
+                          const ing = ingredients.find(i => i.id === ref.ingredientId);
+                          return (
+                            <div key={ref.ingredientId} className="flex justify-between items-center bg-white p-3 border border-slate-100 rounded-lg shadow-sm">
+                              <div className="flex items-center gap-3">
+                                <div className="p-2 bg-slate-50 rounded text-slate-500"><Package size={16}/></div>
+                                <div>
+                                  <p className="font-bold text-slate-800 text-sm">{ing?.name || 'Unknown'}</p>
+                                  <p className="text-xs text-slate-500">{ref.quantity} {ing?.unit}</p>
+                                </div>
+                              </div>
+                              <div className="flex items-center gap-4">
+                                <span className="font-mono text-sm text-slate-600 font-bold">₹{(Number(ing?.unitCost || 0) * ref.quantity).toFixed(2)}</span>
+                                <button onClick={() => removeIngredientFromRecipe(ref.ingredientId)} className="text-slate-300 hover:text-red-500"><Trash2 size={16}/></button>
+                              </div>
+                            </div>
+                          )
+                        })
+                      )}
+                    </div>
+                  </div>
+
+                  {/* Add to Recipe */}
+                  <div className="bg-blue-50 p-4 rounded-xl border border-blue-100">
+                    <h4 className="text-xs font-black text-blue-400 uppercase tracking-widest mb-3">Add Ingredient</h4>
+                    <div className="flex gap-2">
+                      <select value={recipeIngId} onChange={e => setRecipeIngId(e.target.value)} className="flex-1 bg-white border border-blue-200 rounded-lg px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-blue-500">
+                        <option value="">Select Ingredient...</option>
+                        {ingredients.map(i => <option key={i.id} value={i.id}>{i.name} (per {i.unit})</option>)}
+                      </select>
+                      <input type="number" placeholder="Qty" value={recipeQty} onChange={e => setRecipeQty(e.target.value)} className="w-20 bg-white border border-blue-200 rounded-lg px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-blue-500" />
+                      <button onClick={addIngredientToRecipe} className="bg-blue-600 text-white p-2 rounded-lg hover:bg-blue-700 shadow-md transition-all active:scale-95"><Plus size={20}/></button>
+                    </div>
+                  </div>
+                </div>
+
+                <div className="p-6 bg-slate-50 border-t border-slate-100">
+                  <div className="flex justify-between items-center text-lg">
+                    <span className="font-bold text-slate-600">Total Production Cost</span>
+                    <span className="font-black text-slate-900">₹{calculatePlateCost(selectedItem).toFixed(2)}</span>
+                  </div>
+                </div>
+              </div>
             ) : (
-                <div className="h-full flex items-center justify-center text-slate-400"><p>Select a menu item to view details</p></div>
+              <div className="h-full flex flex-col items-center justify-center text-slate-400 p-12 text-center">
+                <ShoppingBag size={64} className="mb-4 opacity-10" />
+                <h3 className="text-xl font-bold text-slate-500">No Item Selected</h3>
+                <p>Select a dish from the catalog to manage its recipe and analyze margins.</p>
+              </div>
             )}
           </div>
         </div>
       ) : (
-        <div className="bg-white rounded-xl shadow-sm border border-slate-200 flex-1 flex flex-col overflow-hidden">
-          <div className="flex-1 overflow-auto">
-            <table className="w-full text-left border-collapse min-w-[800px]">
-              <thead className="bg-slate-100 sticky top-0 z-10 shadow-sm">
+        <div className="bg-white rounded-xl border border-slate-200 flex flex-col overflow-hidden flex-1">
+          <div className="overflow-x-auto">
+            <table className="w-full text-left">
+              <thead className="bg-slate-50 border-b border-slate-200">
                 <tr>
-                  <th className="px-6 py-3 text-xs font-bold text-slate-500 uppercase tracking-wider">Ingredient Name</th>
-                  <th className="px-6 py-3 text-xs font-bold text-slate-500 uppercase tracking-wider">Unit</th>
-                  <th className="px-6 py-3 text-xs font-bold text-slate-500 uppercase tracking-wider">Cost / Unit (₹)</th>
-                  <th className="px-6 py-3 text-xs font-bold text-slate-500 uppercase tracking-wider">Stock Qty</th>
-                  <th className="px-6 py-3 text-xs font-bold text-slate-500 uppercase tracking-wider">Total Value</th>
+                  <th className="px-6 py-4 font-bold text-slate-600 text-sm">Ingredient</th>
+                  <th className="px-6 py-4 font-bold text-slate-600 text-sm">Unit</th>
+                  <th className="px-6 py-4 font-bold text-slate-600 text-sm">Unit Cost</th>
+                  <th className="px-6 py-4 font-bold text-slate-600 text-sm">Stock Level</th>
+                  <th className="px-6 py-4 font-bold text-slate-600 text-sm text-right">Actions</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100">
-                {processedIngredients.map(ing => (
-                  <tr key={ing.id} className="hover:bg-slate-50">
-                    <td className="px-6 py-4 font-medium text-slate-800">{ing.name}</td>
-                    <td className="px-6 py-4 text-slate-500 text-sm">{ing.unit}</td>
-                    <td className="px-6 py-4">₹{(Number(ing.unitCost) || 0).toFixed(2)}</td>
-                    <td className="px-6 py-4">{(Number(ing.stockQuantity) || 0).toFixed(2)}</td>
-                    <td className="px-6 py-4 text-slate-700 font-mono">₹{(Number(ing.unitCost) * Number(ing.stockQuantity)).toFixed(2)}</td>
+                {filteredIngredients.map(ing => (
+                  <tr key={ing.id} className="hover:bg-slate-50 group">
+                    <td className="px-6 py-4">
+                      <div className="flex items-center gap-3">
+                        <div className="p-2 bg-slate-100 rounded text-slate-500"><Package size={18}/></div>
+                        <span className="font-bold text-slate-800">{ing.name}</span>
+                      </div>
+                    </td>
+                    <td className="px-6 py-4 text-slate-500">{ing.unit}</td>
+                    <td className="px-6 py-4 font-mono font-bold">₹{Number(ing.unitCost).toFixed(2)}</td>
+                    <td className="px-6 py-4">
+                      <div className="flex items-center gap-2">
+                        <span className={`w-2 h-2 rounded-full ${ing.stockQuantity < 10 ? 'bg-red-500 animate-pulse' : 'bg-green-500'}`}></span>
+                        <span className="font-medium">{ing.stockQuantity} {ing.unit}</span>
+                      </div>
+                    </td>
+                    <td className="px-6 py-4 text-right">
+                       <button onClick={() => onDeleteIngredient(ing.id)} className="p-2 text-slate-300 hover:text-red-500 transition-colors opacity-0 group-hover:opacity-100"><Trash2 size={18}/></button>
+                    </td>
                   </tr>
                 ))}
               </tbody>
             </table>
           </div>
+        </div>
+      )}
+
+      {/* Hidden File Inputs */}
+      <input type="file" ref={fileInputRef} onChange={e => handleBulkUpload(e, 'ing')} accept=".csv" className="hidden" />
+      <input type="file" ref={menuFileInputRef} onChange={e => handleBulkUpload(e, 'menu')} accept=".csv" className="hidden" />
+
+      {/* ADD ITEM MODAL */}
+      {showAddMenuModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4">
+           <div className="bg-white rounded-2xl shadow-2xl w-full max-w-lg p-6 animate-in zoom-in-95 max-h-[95vh] overflow-y-auto">
+              <div className="flex justify-between items-center mb-6">
+                <h3 className="text-xl font-black">Add New Dish</h3>
+                <button onClick={() => setShowAddMenuModal(false)}><X size={24}/></button>
+              </div>
+              <form onSubmit={handleAddMenu} className="space-y-4">
+                 <div>
+                    <label className="block text-xs font-black uppercase text-slate-400 mb-1">Dish Name</label>
+                    <input autoFocus type="text" value={menuName} onChange={e => setMenuName(e.target.value)} required className="w-full px-4 py-2 border rounded-xl" placeholder="e.g. Chicken Litti" />
+                 </div>
+                 
+                 <div className="grid grid-cols-2 gap-4">
+                    <div>
+                      <label className="block text-xs font-black uppercase text-slate-400 mb-1">Category</label>
+                      <select value={menuCategory} onChange={e => setMenuCategory(e.target.value)} className="w-full px-4 py-2 border rounded-xl bg-white">
+                        <option>Main Course</option>
+                        <option>Appetizers</option>
+                        <option>Beverages</option>
+                        <option>Desserts</option>
+                        <option>Specials</option>
+                      </select>
+                    </div>
+                    <div>
+                      <label className="block text-xs font-black uppercase text-slate-400 mb-1">Full Price (₹)</label>
+                      <input type="number" step="0.01" value={menuFullPrice} onChange={e => setMenuFullPrice(e.target.value)} required className="w-full px-4 py-2 border rounded-xl" placeholder="0.00" />
+                    </div>
+                 </div>
+
+                 <div className="p-4 bg-slate-50 rounded-xl border border-slate-100 space-y-4">
+                    <h4 className="text-[10px] font-black uppercase text-slate-400 tracking-widest">Optional Portion Pricing</h4>
+                    <div className="grid grid-cols-2 gap-4">
+                        <div>
+                            <label className="block text-xs font-bold text-slate-500 mb-1">Half Portion Price</label>
+                            <input type="number" step="0.01" value={menuHalfPrice} onChange={e => setMenuHalfPrice(e.target.value)} className="w-full px-4 py-2 border rounded-xl bg-white" placeholder="Leave empty if N/A" />
+                        </div>
+                        <div>
+                            <label className="block text-xs font-bold text-slate-500 mb-1">Quarter Portion Price</label>
+                            <input type="number" step="0.01" value={menuQuarterPrice} onChange={e => setMenuQuarterPrice(e.target.value)} className="w-full px-4 py-2 border rounded-xl bg-white" placeholder="Leave empty if N/A" />
+                        </div>
+                    </div>
+                 </div>
+
+                 <div>
+                    <label className="block text-xs font-black uppercase text-slate-400 mb-1">Short Description</label>
+                    <textarea value={menuDescription} onChange={e => setMenuDescription(e.target.value)} className="w-full px-4 py-2 border rounded-xl h-20 resize-none" placeholder="Ingredients summary or notes..."></textarea>
+                 </div>
+
+                 <button type="submit" className="w-full py-4 bg-blue-600 text-white font-black rounded-2xl shadow-lg shadow-blue-200 hover:bg-blue-700 transition-all">Save Dish to Menu</button>
+              </form>
+           </div>
+        </div>
+      )}
+
+      {/* ADD INGREDIENT MODAL */}
+      {showAddIngModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4">
+           <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md p-6 animate-in zoom-in-95">
+              <div className="flex justify-between items-center mb-6">
+                <h3 className="text-xl font-black">Add Raw Material</h3>
+                <button onClick={() => setShowAddIngModal(false)}><X size={24}/></button>
+              </div>
+              <form onSubmit={handleAddIngredient} className="space-y-4">
+                 <div>
+                    <label className="block text-xs font-black uppercase text-slate-400 mb-1">Ingredient Name</label>
+                    <input autoFocus type="text" value={ingName} onChange={e => setIngName(e.target.value)} required className="w-full px-4 py-2 border rounded-xl" placeholder="e.g. Basmati Rice" />
+                 </div>
+                 <div className="grid grid-cols-3 gap-3">
+                    <div>
+                      <label className="block text-xs font-black uppercase text-slate-400 mb-1">Unit</label>
+                      <input type="text" value={ingUnit} onChange={e => setIngUnit(e.target.value)} required className="w-full px-3 py-2 border rounded-xl" placeholder="kg" />
+                    </div>
+                    <div>
+                      <label className="block text-xs font-black uppercase text-slate-400 mb-1">Cost / Unit</label>
+                      <input type="number" step="0.01" value={ingCost} onChange={e => setIngCost(e.target.value)} required className="w-full px-3 py-2 border rounded-xl" placeholder="0.00" />
+                    </div>
+                    <div>
+                      <label className="block text-xs font-black uppercase text-slate-400 mb-1">Stock</label>
+                      <input type="number" step="0.1" value={ingStock} onChange={e => setIngStock(e.target.value)} required className="w-full px-3 py-2 border rounded-xl" placeholder="0" />
+                    </div>
+                 </div>
+                 <button type="submit" className="w-full py-4 bg-blue-600 text-white font-black rounded-2xl shadow-lg shadow-blue-200">Register Ingredient</button>
+              </form>
+           </div>
         </div>
       )}
     </div>

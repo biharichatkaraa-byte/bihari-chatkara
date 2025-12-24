@@ -1,4 +1,3 @@
-
 // Enums for Statuses
 export enum OrderStatus {
   NEW = 'NEW',
@@ -16,8 +15,9 @@ export enum PaymentStatus {
 
 export enum PaymentMethod {
   CASH = 'CASH',
+  UPI = 'UPI',
+  POS = 'POS',
   ONLINE = 'ONLINE',
-  PAYTM_POS = 'PAYTM_POS',
 }
 
 export enum UserRole {

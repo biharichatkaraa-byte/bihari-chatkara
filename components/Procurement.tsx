@@ -1,9 +1,8 @@
-
 import React, { useState, useMemo, useRef } from 'react';
 import { Ingredient, User, UserRole, RequisitionRequest, RequisitionStatus, RequisitionUrgency } from '../types';
 import { 
   Truck, AlertCircle, Clock, CheckCircle, XCircle, Package, 
-  Plus, Search, ArrowRight, ShoppingCart, Filter, Trash2, Calendar, FilePlus, Archive, DollarSign, FileUp, ArrowUpDown, ArrowUp, ArrowDown, Printer, FileText, Link
+  Plus, Search, ArrowRight, ShoppingCart, Filter, Trash2, Calendar, FilePlus, Archive, DollarSign, FileUp, ArrowUpDown, ArrowUp, ArrowDown, Printer, FileText, Link, Download, Edit3, Save, X, List, Database
 } from 'lucide-react';
 import { format } from 'date-fns';
 
@@ -36,43 +35,40 @@ const Procurement: React.FC<ProcurementProps> = ({
   onBulkAddIngredients
 }) => {
   const [activeTab, setActiveTab] = useState<'store' | 'history'>('store');
+  const [managerSubTab, setManagerSubTab] = useState<'requests' | 'catalog'>('requests');
   const [isManagerMode, setIsManagerMode] = useState(currentUser.role === UserRole.MANAGER);
   
-  // -- CHEF STOREFRONT STATE --
+  // -- STATE: CHEF STOREFRONT --
   const [cart, setCart] = useState<CartItem[]>([]);
   const [isCartOpen, setIsCartOpen] = useState(false);
   const [storeSearch, setStoreSearch] = useState('');
 
-  // Custom Request State (Chef)
+  // -- STATE: MODALS & FORMS --
   const [showCustomReqModal, setShowCustomReqModal] = useState(false);
-  const [customReqName, setCustomReqName] = useState('');
-  const [customReqQty, setCustomReqQty] = useState('');
-  const [customReqUnit, setCustomReqUnit] = useState('');
-  const [customReqPrice, setCustomReqPrice] = useState('');
-  const [customReqNote, setCustomReqNote] = useState('');
-  const [customReqSupplier, setCustomReqSupplier] = useState('');
-
-  // Add Catalog Item State (Manager)
   const [showAddCatalogModal, setShowAddCatalogModal] = useState(false);
-  const [newCatName, setNewCatName] = useState('');
-  const [newCatCategory, setNewCatCategory] = useState('');
-  const [newCatUnit, setNewCatUnit] = useState('kg');
-  const [newCatCost, setNewCatCost] = useState('');
+  const [editingIngredient, setEditingIngredient] = useState<Ingredient | null>(null);
+  
+  // Custom Request Form
+  const [customReq, setCustomReq] = useState({ name: '', qty: '', unit: '', price: '', note: '', supplier: '' });
+  
+  // Catalog Item Form
+  const [catForm, setCatForm] = useState({ name: '', category: '', unit: 'kg', cost: '' });
 
-  // Bulk Upload State
+  // Bulk Upload Ref
   const fileInputRef = useRef<HTMLInputElement>(null);
 
-  // -- ADMIN DASHBOARD STATE --
+  // -- STATE: ADMIN FILTERS --
   const [filterStatus, setFilterStatus] = useState<string>('All');
   const [filterUrgency, setFilterUrgency] = useState<string>('All');
   const [filterDateStart, setFilterDateStart] = useState('');
+  const [catalogSearch, setCatalogSearch] = useState('');
   const [sortConfig, setSortConfig] = useState<{ key: string, direction: 'asc' | 'desc' }>({ key: 'requestedAt', direction: 'desc' });
   
-  // PO Generation State
+  // PO Preview
   const [poRequest, setPoRequest] = useState<RequisitionRequest | null>(null);
 
   // ------------------------------------------------------------------
-  // CHEF LOGIC
+  // LOGIC: CHEF ACTIONS
   // ------------------------------------------------------------------
   
   const filteredStoreIngredients = ingredients.filter(i => 
@@ -85,35 +81,19 @@ const Procurement: React.FC<ProcurementProps> = ({
       setIsCartOpen(true);
       return;
     }
-    setCart([...cart, { 
-      ingredient, 
-      quantity: 0, // Default 0 to force user input
-      urgency: RequisitionUrgency.LOW, 
-      notes: '' 
-    }]);
+    setCart([...cart, { ingredient, quantity: 0, urgency: RequisitionUrgency.LOW, notes: '' }]);
     setIsCartOpen(true);
   };
 
-  const removeFromCart = (ingredientId: string) => {
-    setCart(cart.filter(item => item.ingredient.id !== ingredientId));
-  };
-
-  const updateCartItem = (ingredientId: string, field: keyof CartItem, value: any) => {
-    setCart(cart.map(item => 
-      item.ingredient.id === ingredientId ? { ...item, [field]: value } : item
-    ));
-  };
-
   const submitRequisition = () => {
-    // Validation
     const invalidItems = cart.filter(item => item.quantity <= 0);
     if (invalidItems.length > 0) {
-      alert(`Please enter a valid quantity for: ${invalidItems.map(i => i.ingredient.name).join(', ')}`);
+      alert(`Invalid quantity for: ${invalidItems.map(i => i.ingredient.name).join(', ')}`);
       return;
     }
 
     cart.forEach(item => {
-      const newRequest: RequisitionRequest = {
+      onRequestAdd({
         id: `req-${Date.now()}-${Math.floor(Math.random()*1000)}`,
         ingredientId: item.ingredient.id,
         ingredientName: item.ingredient.name,
@@ -125,74 +105,63 @@ const Procurement: React.FC<ProcurementProps> = ({
         requestedAt: new Date(),
         notes: item.notes,
         estimatedUnitCost: item.ingredient.unitCost
-      };
-      onRequestAdd(newRequest);
+      });
     });
 
     setCart([]);
     setIsCartOpen(false);
-    alert('Requisition Submitted Successfully!');
+    alert('Requisitions submitted to Manager.');
     setActiveTab('history');
   };
 
-  const handleCustomRequestSubmit = () => {
-      if(!customReqName || !customReqQty || !customReqUnit) {
-          alert("Please fill in required fields (Name, Quantity, Unit)");
-          return;
-      }
+  // ------------------------------------------------------------------
+  // LOGIC: MANAGER ACTIONS
+  // ------------------------------------------------------------------
 
-      const newRequest: RequisitionRequest = {
-        id: `req-custom-${Date.now()}`,
-        ingredientId: `custom-${Date.now()}`, // Temporary ID
-        ingredientName: customReqName,
-        quantity: parseFloat(customReqQty),
-        unit: customReqUnit,
-        urgency: RequisitionUrgency.MEDIUM, // Default
-        status: RequisitionStatus.PENDING,
-        requestedBy: currentUser.name,
-        requestedAt: new Date(),
-        notes: customReqNote,
-        estimatedUnitCost: customReqPrice ? parseFloat(customReqPrice) : 0,
-        preferredSupplier: customReqSupplier
-      };
-
-      onRequestAdd(newRequest);
-      setShowCustomReqModal(false);
-      setCustomReqName('');
-      setCustomReqQty('');
-      setCustomReqUnit('');
-      setCustomReqPrice('');
-      setCustomReqNote('');
-      setCustomReqSupplier('');
-      alert("Custom Request Submitted! Check 'My Orders' status.");
-      setActiveTab('history');
+  const handleDownloadCatalog = () => {
+    const headers = "Name,Category,Unit,UnitCost,StockQuantity\n";
+    const csvContent = ingredients.map(i => `"${i.name}","${i.category || 'General'}","${i.unit}",${i.unitCost},${i.stockQuantity}`).join("\n");
+    const blob = new Blob([headers + csvContent], { type: 'text/csv' });
+    const url = window.URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `RMS_Catalog_${format(new Date(), 'yyyy-MM-dd')}.csv`;
+    a.click();
   };
 
-  // ------------------------------------------------------------------
-  // ADMIN LOGIC
-  // ------------------------------------------------------------------
+  const handleSaveCatalogItem = (e: React.FormEvent) => {
+    e.preventDefault();
+    const cost = parseFloat(catForm.cost);
+    if(!catForm.name || isNaN(cost)) {
+        alert("Name and Unit Cost are required.");
+        return;
+    }
 
-  const handleAddCatalogItem = () => {
-      if(!newCatName || !newCatCost) {
-          alert("Please Name and Cost are required.");
-          return;
-      }
-
-      const newIngredient: Ingredient = {
-          id: `i-new-${Date.now()}`,
-          name: newCatName,
-          category: newCatCategory || 'General',
-          unit: newCatUnit,
-          unitCost: parseFloat(newCatCost),
-          stockQuantity: 0
-      };
-
-      onAddIngredient(newIngredient);
-      setShowAddCatalogModal(false);
-      setNewCatName('');
-      setNewCatCategory('');
-      setNewCatCost('');
-      alert("Item added to Catalog!");
+    if (editingIngredient) {
+        // We use onAddIngredient to handle updates if the system doesn't have a separate update handler 
+        // OR we just treat it as a new item. To properly update, we'd need onUpdateIngredient.
+        // For now, let's assume onAddIngredient handles local/db persistence.
+        onAddIngredient({
+            ...editingIngredient,
+            name: catForm.name,
+            category: catForm.category || 'General',
+            unit: catForm.unit,
+            unitCost: cost
+        });
+    } else {
+        onAddIngredient({
+            id: `i-man-${Date.now()}`,
+            name: catForm.name,
+            category: catForm.category || 'General',
+            unit: catForm.unit,
+            unitCost: cost,
+            stockQuantity: 0
+        });
+    }
+    
+    setShowAddCatalogModal(false);
+    setEditingIngredient(null);
+    setCatForm({ name: '', category: '', unit: 'kg', cost: '' });
   };
 
   const handleBulkUpload = (event: React.ChangeEvent<HTMLInputElement>) => {
@@ -203,734 +172,394 @@ const Procurement: React.FC<ProcurementProps> = ({
     reader.onload = (e) => {
         const text = e.target?.result as string;
         if (!text) return;
-        
         try {
-            const lines = text.split('\n');
+            const lines = text.split(/\r?\n/);
             const newItems: Ingredient[] = [];
-            // Skip header if present (simple check)
             const startIndex = lines[0].toLowerCase().includes('name') ? 1 : 0;
 
             for(let i=startIndex; i<lines.length; i++) {
                 const line = lines[i].trim();
                 if(!line) continue;
-                // Format: Name, Category, Unit, UnitCost, InitialStock(opt)
-                // Use regex to handle CSV better
-                const parts = line.split(',');
+                // Simple CSV splitter that handles some quoted fields
+                const parts = line.match(/(".*?"|[^",\s]+)(?=\s*,|\s*$)/g)?.map(p => p.replace(/"/g, '')) || line.split(',');
+                
                 if(parts.length < 4) continue;
-
-                const name = parts[0].trim();
-                const category = parts[1].trim();
-                const unit = parts[2].trim();
-                const cost = parseFloat(parts[3].trim());
-                const stock = parts[4] ? parseFloat(parts[4].trim()) : 0;
-
-                if(name && !isNaN(cost)) {
+                const cost = parseFloat(parts[3]);
+                if(parts[0] && !isNaN(cost)) {
                     newItems.push({
                         id: `i-bulk-${Date.now()}-${i}`,
-                        name,
-                        category: category || 'General',
-                        unit: unit || 'unit',
-                        unitCost: cost,
-                        stockQuantity: stock
+                        name: parts[0], category: parts[1] || 'General', unit: parts[2] || 'unit', 
+                        unitCost: cost, stockQuantity: parts[4] ? parseFloat(parts[4]) : 0
                     });
                 }
             }
-
             if(newItems.length > 0) {
                 onBulkAddIngredients(newItems);
-            } else {
-                alert("No valid items found in CSV. Expected Format: Name, Category, Unit, UnitCost, Stock");
+                alert(`Imported ${newItems.length} items.`);
             }
-        } catch (err) {
-            alert("Error parsing CSV");
-        }
+        } catch (err) { alert("Error parsing CSV. Check format: Name, Category, Unit, Cost, Stock"); }
         if(fileInputRef.current) fileInputRef.current.value = '';
     };
     reader.readAsText(file);
   };
 
-  const handleSort = (key: string) => {
-      setSortConfig(current => ({
-          key,
-          direction: current.key === key && current.direction === 'asc' ? 'desc' : 'asc'
-      }));
-  };
+  // ------------------------------------------------------------------
+  // RENDER HELPERS
+  // ------------------------------------------------------------------
 
   const filteredRequests = useMemo(() => {
-    const filtered = requests.filter(req => {
-      // Filter by Status
+    return requests.filter(req => {
       if (filterStatus !== 'All' && req.status !== filterStatus) return false;
-      
-      // Filter by Urgency
       if (filterUrgency !== 'All' && req.urgency !== filterUrgency) return false;
-
-      // Filter by Date
-      if (filterDateStart) {
-        const reqDate = new Date(req.requestedAt).setHours(0,0,0,0);
-        const filterDate = new Date(filterDateStart).setHours(0,0,0,0);
-        if (reqDate < filterDate) return false;
-      }
-
       return true;
-    });
+    }).sort((a, b) => new Date(b.requestedAt).getTime() - new Date(a.requestedAt).getTime());
+  }, [requests, filterStatus, filterUrgency]);
 
-    return filtered.sort((a, b) => {
-        let aVal: any = a[sortConfig.key as keyof RequisitionRequest];
-        let bVal: any = b[sortConfig.key as keyof RequisitionRequest];
-
-        // Handle Status Specific Sorting Rank
-        if (sortConfig.key === 'status') {
-            // Priority: Pending > Ordered > Received > Rejected
-            const ranks = { [RequisitionStatus.PENDING]: 4, [RequisitionStatus.ORDERED]: 3, [RequisitionStatus.RECEIVED]: 2, [RequisitionStatus.REJECTED]: 1 };
-            aVal = ranks[a.status];
-            bVal = ranks[b.status];
-        } 
-        else if (sortConfig.key === 'urgency') {
-            const ranks = { [RequisitionUrgency.HIGH]: 3, [RequisitionUrgency.MEDIUM]: 2, [RequisitionUrgency.LOW]: 1 };
-            aVal = ranks[a.urgency];
-            bVal = ranks[b.urgency];
-        }
-
-        if (aVal < bVal) return sortConfig.direction === 'asc' ? -1 : 1;
-        if (aVal > bVal) return sortConfig.direction === 'asc' ? 1 : -1;
-        return 0;
-    });
-  }, [requests, filterStatus, filterUrgency, filterDateStart, sortConfig]);
-
-  // ------------------------------------------------------------------
-  // HELPER UI
-  // ------------------------------------------------------------------
+  const filteredCatalog = useMemo(() => {
+    return ingredients.filter(i => 
+        i.name.toLowerCase().includes(catalogSearch.toLowerCase()) || 
+        i.category?.toLowerCase().includes(catalogSearch.toLowerCase())
+    );
+  }, [ingredients, catalogSearch]);
 
   const getStatusBadge = (status: RequisitionStatus) => {
-    switch (status) {
-      case RequisitionStatus.PENDING: 
-        return <span className="bg-yellow-100 text-yellow-800 border border-yellow-200 px-2 py-1 rounded text-xs font-bold uppercase flex items-center gap-1 w-fit"><Clock size={12}/> Pending</span>;
-      case RequisitionStatus.ORDERED: 
-        return <span className="bg-blue-100 text-blue-800 border border-blue-200 px-2 py-1 rounded text-xs font-bold uppercase flex items-center gap-1 w-fit"><Truck size={12}/> Ordered</span>;
-      case RequisitionStatus.RECEIVED: 
-        return <span className="bg-green-100 text-green-800 border border-green-200 px-2 py-1 rounded text-xs font-bold uppercase flex items-center gap-1 w-fit"><CheckCircle size={12}/> Stocked</span>;
-      case RequisitionStatus.REJECTED: 
-        return <span className="bg-red-100 text-red-800 border border-red-200 px-2 py-1 rounded text-xs font-bold uppercase flex items-center gap-1 w-fit"><XCircle size={12}/> Rejected</span>;
-    }
+    const styles = {
+        [RequisitionStatus.PENDING]: 'bg-yellow-100 text-yellow-800 border-yellow-200',
+        [RequisitionStatus.ORDERED]: 'bg-blue-100 text-blue-800 border-blue-200',
+        [RequisitionStatus.RECEIVED]: 'bg-green-100 text-green-800 border-green-200',
+        [RequisitionStatus.REJECTED]: 'bg-red-100 text-red-800 border-red-200',
+    };
+    return <span className={`px-2 py-1 rounded text-[10px] font-black uppercase border ${styles[status]}`}>{status}</span>;
   };
 
-  const SortHeader = ({ label, sortKey }: { label: string, sortKey: string }) => (
-      <th 
-        className="px-6 py-4 font-semibold text-slate-600 text-sm cursor-pointer hover:bg-slate-50 transition-colors select-none"
-        onClick={() => handleSort(sortKey)}
-      >
-          <div className="flex items-center gap-1">
-              {label}
-              {sortConfig.key === sortKey ? (
-                  sortConfig.direction === 'asc' ? <ArrowUp size={14} className="text-blue-600"/> : <ArrowDown size={14} className="text-blue-600"/>
-              ) : (
-                  <ArrowUpDown size={14} className="text-slate-300"/>
-              )}
-          </div>
-      </th>
-  );
-
-  // ------------------------------------------------------------------
-  // VIEWS
-  // ------------------------------------------------------------------
-
-  const renderChefStorefront = () => (
-    <div className="flex h-full gap-6">
-      {/* Product Catalog */}
-      <div className={`flex-1 flex flex-col ${isCartOpen ? 'hidden lg:flex' : 'flex'}`}>
-        <div className="flex justify-between items-center mb-6">
-           <div className="relative w-full max-w-md">
-              <Search size={18} className="absolute left-3 top-2.5 text-slate-400" />
-              <input 
-                type="text" 
-                placeholder="Search ingredients catalog..."
-                value={storeSearch}
-                onChange={(e) => setStoreSearch(e.target.value)}
-                className="w-full pl-10 pr-4 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 shadow-sm"
-              />
-           </div>
-           
-           <div className="flex items-center gap-2">
-                <button 
-                    onClick={() => setShowCustomReqModal(true)}
-                    className="flex items-center gap-2 bg-slate-800 text-white px-4 py-2 rounded-lg text-sm font-bold hover:bg-slate-700 transition-colors shadow-sm"
-                >
-                    <FilePlus size={16} /> Request Custom Item
-                </button>
-                <button 
-                    onClick={() => setIsCartOpen(!isCartOpen)}
-                    className="relative p-2 bg-blue-50 text-blue-600 rounded-lg hover:bg-blue-100 transition-colors lg:hidden"
-                >
-                    <ShoppingCart size={24} />
-                    {cart.length > 0 && <span className="absolute -top-1 -right-1 w-5 h-5 bg-red-500 text-white text-xs font-bold flex items-center justify-center rounded-full">{cart.length}</span>}
-                </button>
-           </div>
-        </div>
-
-        <div className="grid grid-cols-2 md:grid-cols-3 xl:grid-cols-4 gap-4 overflow-y-auto pr-2 pb-2">
-            {filteredStoreIngredients.map(ing => {
-                const isLowStock = ing.stockQuantity < 50;
-                return (
-                  <div key={ing.id} className={`group bg-white rounded-xl shadow-sm border ${isLowStock ? 'border-amber-200' : 'border-slate-200'} p-4 flex flex-col justify-between transition-all hover:shadow-md hover:border-blue-300`}>
-                      <div className="flex items-start justify-between mb-2">
-                          <div className={`p-2 rounded-lg ${isLowStock ? 'bg-amber-100 text-amber-600' : 'bg-slate-100 text-slate-500'}`}>
-                              <Package size={24} />
-                          </div>
-                          {isLowStock && (
-                              <span className="text-[10px] uppercase font-bold text-amber-600 bg-amber-50 px-2 py-1 rounded-full border border-amber-100 animate-pulse">Low Stock</span>
-                          )}
-                      </div>
-                      
-                      <div className="mb-4">
-                          <h4 className="font-bold text-slate-800 line-clamp-1" title={ing.name}>{ing.name}</h4>
-                          <p className="text-sm text-slate-500">
-                             In Stock: <span className={`font-mono font-medium ${isLowStock ? 'text-amber-600' : 'text-slate-700'}`}>{ing.stockQuantity} {ing.unit}</span>
-                          </p>
-                      </div>
-
-                      <button 
-                        onClick={() => addToCart(ing)}
-                        className="w-full py-2 bg-slate-50 text-slate-700 font-medium rounded-lg hover:bg-blue-600 hover:text-white transition-colors flex items-center justify-center gap-2 group-hover:bg-blue-600 group-hover:text-white"
-                      >
-                         <Plus size={16} /> Request
-                      </button>
-                  </div>
-                )
-            })}
-        </div>
-      </div>
-
-      {/* Cart Sidebar */}
-      {(isCartOpen || cart.length > 0) && (
-          <div className={`w-full lg:w-96 bg-white rounded-xl shadow-xl border border-slate-200 flex flex-col ${isCartOpen ? 'flex' : 'hidden lg:flex'}`}>
-              <div className="p-4 border-b border-slate-100 flex justify-between items-center bg-slate-50 rounded-t-xl">
-                  <h3 className="font-bold text-lg text-slate-800 flex items-center gap-2">
-                      <ShoppingCart size={20} /> Requisition List
-                  </h3>
-                  <span className="bg-blue-600 text-white text-xs font-bold px-2 py-1 rounded-full">{cart.length}</span>
-              </div>
-
-              <div className="flex-1 overflow-y-auto p-4 space-y-4">
-                  {cart.length === 0 ? (
-                      <div className="h-full flex flex-col items-center justify-center text-slate-400">
-                          <Package size={48} className="mb-2 opacity-20" />
-                          <p>Your list is empty.</p>
-                          <p className="text-xs">Add items from the catalog.</p>
-                      </div>
-                  ) : (
-                      cart.map((item, idx) => (
-                          <div key={item.ingredient.id} className="bg-white border border-slate-200 rounded-lg p-3 shadow-sm relative group">
-                              <button 
-                                onClick={() => removeFromCart(item.ingredient.id)}
-                                className="absolute top-2 right-2 text-slate-300 hover:text-red-500 transition-colors"
-                              >
-                                  <XCircle size={16} />
-                              </button>
-                              
-                              <p className="font-bold text-slate-800 text-sm mb-1">{item.ingredient.name}</p>
-                              <p className="text-xs text-slate-500 mb-3">Unit: {item.ingredient.unit}</p>
-                              
-                              <div className="grid grid-cols-2 gap-2 mb-2">
-                                  <div>
-                                      <label className="text-[10px] uppercase font-bold text-slate-400">Qty Needed</label>
-                                      <input 
-                                        type="number"
-                                        value={item.quantity === 0 ? '' : item.quantity}
-                                        onChange={(e) => updateCartItem(item.ingredient.id, 'quantity', parseFloat(e.target.value))}
-                                        className="w-full px-2 py-1 text-sm border border-slate-300 rounded focus:ring-2 focus:ring-blue-500"
-                                        placeholder="0"
-                                      />
-                                  </div>
-                                  <div>
-                                      <label className="text-[10px] uppercase font-bold text-slate-400">Urgency</label>
-                                      <select 
-                                        value={item.urgency}
-                                        onChange={(e) => updateCartItem(item.ingredient.id, 'urgency', e.target.value)}
-                                        className="w-full px-2 py-1 text-sm border border-slate-300 rounded focus:ring-2 focus:ring-blue-500"
-                                      >
-                                          <option value={RequisitionUrgency.LOW}>Low</option>
-                                          <option value={RequisitionUrgency.MEDIUM}>Medium</option>
-                                          <option value={RequisitionUrgency.HIGH}>High</option>
-                                      </select>
-                                  </div>
-                              </div>
-                              <div>
-                                  <input 
-                                    type="text"
-                                    placeholder="Notes (optional)"
-                                    value={item.notes}
-                                    onChange={(e) => updateCartItem(item.ingredient.id, 'notes', e.target.value)}
-                                    className="w-full px-2 py-1 text-xs border border-slate-200 rounded focus:ring-1 focus:ring-blue-300 text-slate-600"
-                                  />
-                              </div>
-                          </div>
-                      ))
-                  )}
-              </div>
-
-              <div className="p-4 border-t border-slate-100 bg-slate-50 rounded-b-xl">
-                  <button 
-                    onClick={submitRequisition}
-                    disabled={cart.length === 0}
-                    className="w-full py-3 bg-blue-600 hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed text-white font-bold rounded-lg shadow-lg shadow-blue-200 transition-all flex items-center justify-center gap-2"
-                  >
-                      Submit Requisition <ArrowRight size={18} />
-                  </button>
-              </div>
-          </div>
-      )}
-    </div>
-  );
-
-  const renderChefHistory = () => (
-      <div className="bg-white rounded-xl shadow-sm border border-slate-200 flex flex-col h-full overflow-hidden">
-          <div className="p-4 border-b border-slate-100 bg-slate-50">
-              <h3 className="font-bold text-lg text-slate-800">My Request History</h3>
-          </div>
-          <div className="flex-1 overflow-auto">
-              <table className="w-full text-left">
-                  <thead className="bg-white border-b border-slate-200">
-                      <tr>
-                          <th className="px-6 py-3 text-xs font-bold text-slate-500 uppercase">Item</th>
-                          <th className="px-6 py-3 text-xs font-bold text-slate-500 uppercase">Status</th>
-                          <th className="px-6 py-3 text-xs font-bold text-slate-500 uppercase">Requested</th>
-                          <th className="px-6 py-3 text-xs font-bold text-slate-500 uppercase">Note</th>
-                      </tr>
-                  </thead>
-                  <tbody className="divide-y divide-slate-100">
-                      {requests.filter(r => r.requestedBy === currentUser.name).length === 0 ? (
-                          <tr><td colSpan={4} className="p-8 text-center text-slate-400">No requests found. Go to "Store" to create one.</td></tr>
-                      ) : (
-                        requests
-                        .filter(r => r.requestedBy === currentUser.name)
-                        .sort((a,b) => new Date(b.requestedAt).getTime() - new Date(a.requestedAt).getTime())
-                        .map(req => (
-                            <tr key={req.id} className="hover:bg-slate-50">
-                                <td className="px-6 py-4">
-                                    <p className="font-medium text-slate-800">{req.ingredientName}</p>
-                                    <p className="text-xs text-slate-500">{req.quantity} {req.unit}</p>
-                                </td>
-                                <td className="px-6 py-4">
-                                    {getStatusBadge(req.status)}
-                                </td>
-                                <td className="px-6 py-4 text-sm text-slate-500">
-                                    {format(new Date(req.requestedAt), 'MMM dd, HH:mm')}
-                                </td>
-                                <td className="px-6 py-4 text-sm text-slate-500 italic truncate max-w-xs">
-                                    {req.notes || '-'}
-                                </td>
-                            </tr>
-                        ))
-                      )}
-                  </tbody>
-              </table>
-          </div>
-      </div>
-  );
-
-  const renderAdminDashboard = () => (
-    <div className="flex flex-col h-full space-y-4">
-        {/* Hidden File Input */}
-        <input 
-            type="file" 
-            accept=".csv"
-            ref={fileInputRef}
-            onChange={handleBulkUpload}
-            className="hidden"
-        />
-
-        {/* Filters Toolbar */}
-        <div className="bg-white p-4 rounded-xl shadow-sm border border-slate-200 flex flex-wrap items-center gap-4">
-            <div className="flex items-center gap-2 text-slate-600 font-semibold text-sm">
-                <Filter size={18} /> Filters:
-            </div>
-            
-            <div className="flex items-center gap-2">
-                <span className="text-xs text-slate-400 uppercase font-bold">Status</span>
-                <select 
-                    value={filterStatus} 
-                    onChange={(e) => setFilterStatus(e.target.value)}
-                    className="text-sm border border-slate-300 rounded-md px-2 py-1 focus:ring-2 focus:ring-blue-500"
-                >
-                    <option value="All">All Statuses</option>
-                    <option value={RequisitionStatus.PENDING}>Pending</option>
-                    <option value={RequisitionStatus.ORDERED}>Ordered</option>
-                    <option value={RequisitionStatus.RECEIVED}>Received</option>
-                    <option value={RequisitionStatus.REJECTED}>Rejected</option>
-                </select>
-            </div>
-
-            <div className="flex items-center gap-2">
-                <span className="text-xs text-slate-400 uppercase font-bold">Urgency</span>
-                <select 
-                    value={filterUrgency} 
-                    onChange={(e) => setFilterUrgency(e.target.value)}
-                    className="text-sm border border-slate-300 rounded-md px-2 py-1 focus:ring-2 focus:ring-blue-500"
-                >
-                    <option value="All">All Levels</option>
-                    <option value={RequisitionUrgency.HIGH}>High</option>
-                    <option value={RequisitionUrgency.MEDIUM}>Medium</option>
-                    <option value={RequisitionUrgency.LOW}>Low</option>
-                </select>
-            </div>
-
-            <div className="flex items-center gap-2">
-                <span className="text-xs text-slate-400 uppercase font-bold">Since</span>
-                <input 
-                    type="date"
-                    value={filterDateStart}
-                    onChange={(e) => setFilterDateStart(e.target.value)}
-                    className="text-sm border border-slate-300 rounded-md px-2 py-1 focus:ring-2 focus:ring-blue-500"
-                />
-            </div>
-
-            <button 
-                onClick={() => { setFilterStatus('All'); setFilterUrgency('All'); setFilterDateStart(''); }}
-                className="text-xs text-blue-600 hover:text-blue-800 ml-auto font-medium"
-            >
-                Reset Filters
-            </button>
-            
-            <div className="w-px h-6 bg-slate-300 mx-2"></div>
-            
-            <button 
-                onClick={() => fileInputRef.current?.click()}
-                className="flex items-center gap-2 bg-white text-slate-600 border border-slate-300 px-3 py-1.5 rounded-lg text-sm font-bold hover:bg-slate-50 transition-colors shadow-sm"
-            >
-                <FileUp size={16} /> Bulk Catalog
-            </button>
-            <button 
-                onClick={() => setShowAddCatalogModal(true)}
-                className="flex items-center gap-2 bg-blue-600 text-white px-3 py-1.5 rounded-lg text-sm font-bold hover:bg-blue-700 transition-colors shadow-sm"
-            >
-                <Plus size={16} /> Add Item
-            </button>
-        </div>
-
-        {/* Requests Table */}
-        <div className="bg-white rounded-xl shadow-sm border border-slate-200 flex-1 flex flex-col overflow-hidden">
-            <div className="p-4 border-b border-slate-100 bg-slate-50">
-                <h3 className="font-bold text-lg text-slate-800">Procurement Control Tower</h3>
-            </div>
-            <div className="flex-1 overflow-auto">
-                <table className="w-full text-left">
-                    <thead className="bg-white border-b border-slate-200 sticky top-0 shadow-sm z-10">
-                        <tr>
-                            <th className="px-6 py-4 font-semibold text-slate-600 text-sm">Item Details</th>
-                            <SortHeader label="Requester" sortKey="requestedBy" />
-                            <SortHeader label="Urgency" sortKey="urgency" />
-                            <SortHeader label="Status" sortKey="status" />
-                            <SortHeader label="Date" sortKey="requestedAt" />
-                            <th className="px-6 py-4 font-semibold text-slate-600 text-sm text-right">Workflow Actions</th>
-                        </tr>
-                    </thead>
-                    <tbody className="divide-y divide-slate-100">
-                        {filteredRequests.length === 0 ? (
-                            <tr><td colSpan={6} className="p-12 text-center text-slate-400">No requests match your filters.</td></tr>
-                        ) : (
-                            filteredRequests.map(req => (
-                                <tr key={req.id} className="hover:bg-slate-50 transition-colors">
-                                    <td className="px-6 py-4">
-                                        <p className="font-bold text-slate-800 text-sm">{req.ingredientName}</p>
-                                        <p className="text-sm text-slate-500">Qty: {req.quantity} {req.unit}</p>
-                                        {req.estimatedUnitCost && req.estimatedUnitCost > 0 && (
-                                            <p className="text-xs text-slate-400">Est. Cost: ₹{req.estimatedUnitCost}</p>
-                                        )}
-                                        {req.notes && (
-                                            <div className="mt-1 text-xs text-slate-500 bg-slate-100 p-1 rounded inline-block">
-                                                Note: {req.notes}
-                                            </div>
-                                        )}
-                                        {req.preferredSupplier && (
-                                            <div className="mt-1 flex items-center gap-1 text-xs text-blue-600">
-                                                <Link size={10} /> {req.preferredSupplier}
-                                            </div>
-                                        )}
-                                    </td>
-                                    <td className="px-6 py-4">
-                                        <div className="flex flex-col">
-                                            <span className="text-sm font-medium text-slate-700">{req.requestedBy}</span>
-                                        </div>
-                                    </td>
-                                    <td className="px-6 py-4">
-                                        {req.urgency === RequisitionUrgency.HIGH && <span className="text-xs font-bold bg-red-100 text-red-700 px-2 py-1 rounded">High</span>}
-                                        {req.urgency === RequisitionUrgency.MEDIUM && <span className="text-xs font-semibold text-orange-600">Medium</span>}
-                                        {req.urgency === RequisitionUrgency.LOW && <span className="text-xs text-slate-500">Low</span>}
-                                    </td>
-                                    <td className="px-6 py-4">
-                                        {getStatusBadge(req.status)}
-                                    </td>
-                                    <td className="px-6 py-4 text-sm text-slate-500">
-                                        <div className="flex items-center gap-1">
-                                            <Calendar size={12} /> {format(new Date(req.requestedAt), 'MMM dd')}
-                                        </div>
-                                    </td>
-                                    <td className="px-6 py-4 text-right">
-                                        <div className="flex justify-end gap-2">
-                                            {/* Action: Pending -> Approved/Ordered */}
-                                            {req.status === RequisitionStatus.PENDING && (
-                                                <>
-                                                    <button 
-                                                        onClick={() => onRequestUpdate(req.id, RequisitionStatus.REJECTED)}
-                                                        className="p-2 text-slate-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors"
-                                                        title="Reject Request"
-                                                    >
-                                                        <Trash2 size={16} />
-                                                    </button>
-                                                    <button 
-                                                        onClick={() => onRequestUpdate(req.id, RequisitionStatus.ORDERED)}
-                                                        className="flex items-center gap-1 px-3 py-1.5 bg-blue-600 text-white text-xs font-bold rounded hover:bg-blue-700 shadow-sm transition-colors"
-                                                    >
-                                                        <Truck size={12} /> Approve & Order
-                                                    </button>
-                                                </>
-                                            )}
-
-                                            {/* Action: Ordered -> Generate PO or Receive */}
-                                            {req.status === RequisitionStatus.ORDERED && (
-                                                <div className="flex gap-2">
-                                                    <button 
-                                                        onClick={() => setPoRequest(req)}
-                                                        className="p-2 text-slate-400 hover:text-slate-700 hover:bg-slate-100 rounded-lg transition-colors border border-transparent hover:border-slate-200"
-                                                        title="Generate Purchase Order"
-                                                    >
-                                                        <FileText size={16} />
-                                                    </button>
-                                                    <button 
-                                                        onClick={() => onReceiveItem(req.id)}
-                                                        className="flex items-center gap-1 px-3 py-1.5 bg-green-600 text-white text-xs font-bold rounded hover:bg-green-700 shadow-sm transition-colors"
-                                                    >
-                                                        <CheckCircle size={12} /> Receive Stock
-                                                    </button>
-                                                </div>
-                                            )}
-
-                                            {(req.status === RequisitionStatus.RECEIVED || req.status === RequisitionStatus.REJECTED) && (
-                                                <span className="text-xs text-slate-300 font-mono">No Actions</span>
-                                            )}
-                                        </div>
-                                    </td>
-                                </tr>
-                            ))
-                        )}
-                    </tbody>
-                </table>
-            </div>
-        </div>
-    </div>
-  );
-
   return (
-    <div className="h-full flex flex-col space-y-4 relative">
-      {/* Top Header & Navigation */}
-      <div className="flex justify-between items-center bg-white p-4 rounded-xl shadow-sm border border-slate-200">
+    <div className="h-full flex flex-col space-y-4">
+      {/* Module Header */}
+      <div className="bg-white p-4 rounded-2xl shadow-sm border border-slate-200 flex flex-col md:flex-row justify-between items-center gap-4">
          <div>
-            <h2 className="text-2xl font-bold text-slate-800">Procurement Module</h2>
-            <p className="text-slate-500 text-sm">
-                {isManagerMode ? 'Manage company purchasing and inventory flow.' : 'Request ingredients and supplies.'}
-            </p>
+            <h2 className="text-2xl font-black text-slate-800 flex items-center gap-2"><Truck className="text-blue-600" /> Procurement</h2>
+            <p className="text-slate-500 text-sm font-medium">Supply chain and inventory replenishment hub.</p>
          </div>
-
-         <div className="flex items-center bg-slate-100 p-1 rounded-lg">
+         <div className="flex bg-slate-100 p-1.5 rounded-xl border border-slate-200">
              {currentUser.role === UserRole.MANAGER ? (
-                 <>
-                    <button 
-                        onClick={() => setIsManagerMode(true)}
-                        className={`px-4 py-2 rounded-md text-sm font-bold transition-all ${isManagerMode ? 'bg-white shadow text-slate-800' : 'text-slate-500 hover:text-slate-700'}`}
-                    >
-                        Manager Dashboard
-                    </button>
-                    <button 
-                        onClick={() => setIsManagerMode(false)}
-                        className={`px-4 py-2 rounded-md text-sm font-bold transition-all ${!isManagerMode ? 'bg-white shadow text-slate-800' : 'text-slate-500 hover:text-slate-700'}`}
-                    >
-                        Chef Storefront
-                    </button>
-                 </>
+                 <div className="flex gap-1">
+                    <button onClick={() => setIsManagerMode(true)} className={`px-4 py-2 rounded-lg text-xs font-black transition-all ${isManagerMode ? 'bg-white shadow text-blue-600' : 'text-slate-500'}`}>MANAGER CONTROL</button>
+                    <button onClick={() => setIsManagerMode(false)} className={`px-4 py-2 rounded-lg text-xs font-black transition-all ${!isManagerMode ? 'bg-white shadow text-blue-600' : 'text-slate-500'}`}>CHEF VIEW</button>
+                 </div>
              ) : (
-                <>
-                    <button 
-                        onClick={() => setActiveTab('store')}
-                        className={`px-4 py-2 rounded-md text-sm font-bold transition-all ${activeTab === 'store' ? 'bg-white shadow text-slate-800' : 'text-slate-500 hover:text-slate-700'}`}
-                    >
-                        Storefront
-                    </button>
-                    <button 
-                        onClick={() => setActiveTab('history')}
-                        className={`px-4 py-2 rounded-md text-sm font-bold transition-all ${activeTab === 'history' ? 'bg-white shadow text-slate-800' : 'text-slate-500 hover:text-slate-700'}`}
-                    >
-                        My Orders
-                    </button>
-                </>
+                <div className="flex gap-1">
+                    <button onClick={() => setActiveTab('store')} className={`px-4 py-2 rounded-lg text-xs font-black transition-all ${activeTab === 'store' ? 'bg-white shadow text-blue-600' : 'text-slate-500'}`}>STOREFRONT</button>
+                    <button onClick={() => setActiveTab('history')} className={`px-4 py-2 rounded-lg text-xs font-black transition-all ${activeTab === 'history' ? 'bg-white shadow text-blue-600' : 'text-slate-500'}`}>MY REQUESTS</button>
+                </div>
              )}
          </div>
       </div>
 
       <div className="flex-1 overflow-hidden">
-         {isManagerMode ? (
-             renderAdminDashboard()
-         ) : (
-             activeTab === 'store' ? renderChefStorefront() : renderChefHistory()
-         )}
+        {isManagerMode ? (
+            <div className="flex flex-col h-full space-y-4">
+                {/* Manager Toolbar */}
+                <div className="flex flex-wrap items-center justify-between gap-4 bg-white p-4 rounded-2xl border border-slate-200 shadow-sm">
+                    <div className="flex bg-slate-100 p-1 rounded-xl">
+                        <button onClick={() => setManagerSubTab('requests')} className={`px-4 py-2 rounded-lg text-xs font-black flex items-center gap-2 ${managerSubTab === 'requests' ? 'bg-white shadow text-slate-800' : 'text-slate-500'}`}><List size={14}/> REQUISITIONS</button>
+                        <button onClick={() => setManagerSubTab('catalog')} className={`px-4 py-2 rounded-lg text-xs font-black flex items-center gap-2 ${managerSubTab === 'catalog' ? 'bg-white shadow text-slate-800' : 'text-slate-500'}`}><Database size={14}/> MASTER CATALOG</button>
+                    </div>
+
+                    <div className="flex gap-2">
+                        <input type="file" accept=".csv" ref={fileInputRef} onChange={handleBulkUpload} className="hidden" />
+                        <button onClick={() => fileInputRef.current?.click()} className="p-2.5 bg-white border border-slate-200 rounded-xl text-slate-600 hover:bg-slate-50 transition-colors shadow-sm" title="Bulk Upload Items"><FileUp size={20}/></button>
+                        <button onClick={handleDownloadCatalog} className="p-2.5 bg-white border border-slate-200 rounded-xl text-slate-600 hover:bg-slate-50 transition-colors shadow-sm" title="Download Full Catalog"><Download size={20}/></button>
+                        <button onClick={() => { setEditingIngredient(null); setCatForm({name:'', category:'', unit:'kg', cost:''}); setShowAddCatalogModal(true); }} className="px-4 py-2.5 bg-blue-600 text-white rounded-xl text-xs font-black flex items-center gap-2 shadow-lg shadow-blue-100 hover:bg-blue-700 transition-all"><Plus size={18}/> ADD TO CATALOG</button>
+                    </div>
+                </div>
+
+                {managerSubTab === 'requests' ? (
+                    <div className="bg-white rounded-2xl border border-slate-200 flex-1 overflow-hidden flex flex-col shadow-sm">
+                        <div className="p-4 border-b border-slate-100 bg-slate-50/50 flex flex-wrap gap-4 items-center">
+                            <div className="flex items-center gap-2"><span className="text-[10px] font-black text-slate-400 uppercase">Status:</span><select value={filterStatus} onChange={(e) => setFilterStatus(e.target.value)} className="text-xs font-bold border border-slate-200 rounded-lg px-2 py-1 outline-none"><option value="All">All</option>{Object.values(RequisitionStatus).map(s => <option key={s} value={s}>{s}</option>)}</select></div>
+                            <div className="flex items-center gap-2"><span className="text-[10px] font-black text-slate-400 uppercase">Urgency:</span><select value={filterUrgency} onChange={(e) => setFilterUrgency(e.target.value)} className="text-xs font-bold border border-slate-200 rounded-lg px-2 py-1 outline-none"><option value="All">All</option>{Object.values(RequisitionUrgency).map(u => <option key={u} value={u}>{u}</option>)}</select></div>
+                        </div>
+                        <div className="overflow-auto flex-1">
+                            <table className="w-full text-left">
+                                <thead className="bg-slate-50 sticky top-0 z-10 border-b border-slate-100">
+                                    <tr>
+                                        <th className="px-6 py-4 text-[10px] font-black text-slate-400 uppercase">Item Requested</th>
+                                        <th className="px-6 py-4 text-[10px] font-black text-slate-400 uppercase">Staff</th>
+                                        <th className="px-6 py-4 text-[10px] font-black text-slate-400 uppercase">Urgency</th>
+                                        <th className="px-6 py-4 text-[10px] font-black text-slate-400 uppercase text-center">Status</th>
+                                        <th className="px-6 py-4 text-right"></th>
+                                    </tr>
+                                </thead>
+                                <tbody className="divide-y divide-slate-100">
+                                    {filteredRequests.length === 0 ? (
+                                        <tr><td colSpan={5} className="p-20 text-center text-slate-400 font-bold">No active requisitions found.</td></tr>
+                                    ) : (
+                                        filteredRequests.map(req => (
+                                            <tr key={req.id} className="hover:bg-blue-50/30 transition-colors group">
+                                                <td className="px-6 py-4">
+                                                    <p className="font-bold text-slate-800">{req.ingredientName}</p>
+                                                    <p className="text-xs text-slate-500 font-medium">{req.quantity} {req.unit} @ ₹{req.estimatedUnitCost || 0}/unit</p>
+                                                    {req.notes && <p className="text-[10px] text-slate-400 italic mt-1 max-w-xs truncate">{req.notes}</p>}
+                                                </td>
+                                                <td className="px-6 py-4">
+                                                    <p className="text-xs font-bold text-slate-700">{req.requestedBy}</p>
+                                                    <p className="text-[10px] text-slate-400 font-bold uppercase">{format(new Date(req.requestedAt), 'dd MMM, HH:mm')}</p>
+                                                </td>
+                                                <td className="px-6 py-4">
+                                                    <span className={`px-2 py-0.5 rounded text-[10px] font-black uppercase ${req.urgency === 'HIGH' ? 'bg-red-100 text-red-600' : req.urgency === 'MEDIUM' ? 'bg-orange-100 text-orange-600' : 'bg-slate-100 text-slate-500'}`}>{req.urgency}</span>
+                                                </td>
+                                                <td className="px-6 py-4 text-center">{getStatusBadge(req.status)}</td>
+                                                <td className="px-6 py-4 text-right">
+                                                    <div className="flex justify-end gap-2">
+                                                        {req.status === RequisitionStatus.PENDING && (
+                                                            <>
+                                                                <button onClick={() => onRequestUpdate(req.id, RequisitionStatus.REJECTED)} className="p-2 text-slate-300 hover:text-red-500 transition-colors"><XCircle size={18}/></button>
+                                                                <button onClick={() => onRequestUpdate(req.id, RequisitionStatus.ORDERED)} className="px-3 py-1.5 bg-blue-600 text-white rounded-lg text-[10px] font-black shadow-lg shadow-blue-100 flex items-center gap-1 hover:bg-blue-700"><Truck size={12}/> ORDER NOW</button>
+                                                            </>
+                                                        )}
+                                                        {req.status === RequisitionStatus.ORDERED && (
+                                                            <button onClick={() => onReceiveItem(req.id)} className="px-3 py-1.5 bg-emerald-600 text-white rounded-lg text-[10px] font-black shadow-lg shadow-emerald-100 flex items-center gap-1 hover:bg-emerald-700"><CheckCircle size={12}/> RECEIVE STOCK</button>
+                                                        )}
+                                                        {req.status === RequisitionStatus.ORDERED && (
+                                                            <button onClick={() => setPoRequest(req)} className="p-2 bg-slate-100 text-slate-600 rounded-lg hover:bg-slate-200 transition-colors"><FileText size={16}/></button>
+                                                        )}
+                                                    </div>
+                                                </td>
+                                            </tr>
+                                        ))
+                                    )}
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                ) : (
+                    /* Master Catalog View for Manager */
+                    <div className="bg-white rounded-2xl border border-slate-200 flex-1 overflow-hidden flex flex-col shadow-sm">
+                        <div className="p-4 border-b border-slate-100 flex items-center gap-3">
+                            <div className="relative flex-1 max-w-sm">
+                                <Search size={16} className="absolute left-3 top-2.5 text-slate-400" />
+                                <input 
+                                    type="text" 
+                                    placeholder="Search catalog items..." 
+                                    value={catalogSearch}
+                                    onChange={(e) => setCatalogSearch(e.target.value)}
+                                    className="w-full pl-9 pr-4 py-2 border border-slate-200 rounded-xl text-xs font-bold outline-none focus:border-blue-500"
+                                />
+                            </div>
+                            <span className="text-[10px] font-black text-slate-400 uppercase">{filteredCatalog.length} items defined</span>
+                        </div>
+                        <div className="overflow-auto flex-1">
+                             <table className="w-full text-left">
+                                <thead className="bg-slate-50 sticky top-0 z-10 border-b border-slate-100">
+                                    <tr>
+                                        <th className="px-6 py-4 text-[10px] font-black text-slate-400 uppercase">Ingredient Name</th>
+                                        <th className="px-6 py-4 text-[10px] font-black text-slate-400 uppercase">Category</th>
+                                        <th className="px-6 py-4 text-[10px] font-black text-slate-400 uppercase">Unit Cost</th>
+                                        <th className="px-6 py-4 text-[10px] font-black text-slate-400 uppercase">Current Stock</th>
+                                        <th className="px-6 py-4 text-right"></th>
+                                    </tr>
+                                </thead>
+                                <tbody className="divide-y divide-slate-100">
+                                    {filteredCatalog.map(ing => (
+                                        <tr key={ing.id} className="hover:bg-slate-50 transition-colors">
+                                            <td className="px-6 py-4 font-bold text-slate-800">{ing.name}</td>
+                                            <td className="px-6 py-4 text-xs font-bold text-slate-500 uppercase">{ing.category || 'General'}</td>
+                                            <td className="px-6 py-4 text-xs font-black text-slate-900">₹{(ing.unitCost || 0).toFixed(2)} / {ing.unit}</td>
+                                            <td className="px-6 py-4">
+                                                <span className={`px-2 py-0.5 rounded-full text-[10px] font-black border ${ing.stockQuantity < 10 ? 'bg-red-50 text-red-600 border-red-100' : 'bg-green-50 text-green-600 border-green-100'}`}>
+                                                    {ing.stockQuantity} {ing.unit}
+                                                </span>
+                                            </td>
+                                            <td className="px-6 py-4 text-right">
+                                                <button 
+                                                    onClick={() => {
+                                                        setEditingIngredient(ing);
+                                                        setCatForm({ name: ing.name, category: ing.category || '', unit: ing.unit, cost: ing.unitCost.toString() });
+                                                        setShowAddCatalogModal(true);
+                                                    }}
+                                                    className="p-2 text-slate-400 hover:text-blue-600 transition-colors"
+                                                >
+                                                    <Edit3 size={16}/>
+                                                </button>
+                                            </td>
+                                        </tr>
+                                    ))}
+                                </tbody>
+                             </table>
+                        </div>
+                    </div>
+                )}
+            </div>
+        ) : (
+            /* Chef Storefront View */
+            <div className="flex h-full gap-6">
+                <div className={`flex-1 flex flex-col ${isCartOpen ? 'hidden lg:flex' : 'flex'}`}>
+                    <div className="flex justify-between items-center mb-4">
+                        <div className="relative w-full max-w-md">
+                            <Search size={18} className="absolute left-3 top-3 text-slate-400" />
+                            <input type="text" placeholder="Search ingredient catalog..." value={storeSearch} onChange={(e) => setStoreSearch(e.target.value)} className="w-full pl-10 pr-4 py-3 border border-slate-200 rounded-2xl focus:ring-2 focus:ring-blue-500 shadow-sm font-medium" />
+                        </div>
+                        <div className="flex gap-2">
+                             <button onClick={() => setShowCustomReqModal(true)} className="flex items-center gap-2 bg-slate-800 text-white px-4 py-2 rounded-xl text-xs font-black hover:bg-slate-700 shadow-lg"><FilePlus size={16} /> CUSTOM ITEM</button>
+                             <button onClick={() => setIsCartOpen(!isCartOpen)} className="lg:hidden p-3 bg-blue-600 text-white rounded-xl shadow-lg relative"><ShoppingCart size={20} />{cart.length > 0 && <span className="absolute -top-1 -right-1 bg-red-500 text-[10px] w-5 h-5 rounded-full flex items-center justify-center font-black">{cart.length}</span>}</button>
+                        </div>
+                    </div>
+                    {activeTab === 'store' ? (
+                        <div className="grid grid-cols-2 md:grid-cols-3 xl:grid-cols-4 gap-4 overflow-y-auto pr-2 pb-4">
+                            {filteredStoreIngredients.map(ing => (
+                                <div key={ing.id} onClick={() => addToCart(ing)} className="bg-white p-4 rounded-2xl border border-slate-200 shadow-sm hover:border-blue-500 hover:shadow-xl cursor-pointer transition-all flex flex-col justify-between group">
+                                    <div className="flex justify-between items-start mb-3">
+                                        <div className="p-2 bg-slate-50 rounded-xl text-slate-400 group-hover:text-blue-500 group-hover:bg-blue-50 transition-colors"><Package size={24}/></div>
+                                        {ing.stockQuantity < 5 ? <span className="px-2 py-0.5 bg-red-100 text-red-600 text-[8px] font-black uppercase rounded">Critical</span> : null}
+                                    </div>
+                                    <div>
+                                        <h4 className="font-black text-slate-800 truncate leading-tight mb-1">{ing.name}</h4>
+                                        <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">{ing.category || 'General'}</p>
+                                    </div>
+                                    <div className="mt-4 flex justify-between items-center border-t border-slate-50 pt-3">
+                                        <span className="text-xs font-bold text-slate-500">Stock: {ing.stockQuantity} {ing.unit}</span>
+                                        <Plus size={16} className="text-blue-600" />
+                                    </div>
+                                </div>
+                            ))}
+                        </div>
+                    ) : (
+                        <div className="bg-white rounded-2xl border border-slate-200 overflow-hidden flex-1 flex flex-col shadow-sm">
+                            <div className="p-4 border-b border-slate-100 bg-slate-50/50"><h3 className="text-sm font-black text-slate-800">REQUEST LOG</h3></div>
+                            <div className="overflow-auto flex-1">
+                                <table className="w-full text-left">
+                                    <thead className="bg-slate-50 border-b border-slate-100">
+                                        <tr><th className="px-6 py-4 text-[10px] font-black text-slate-400 uppercase">Item</th><th className="px-6 py-4 text-[10px] font-black text-slate-400 uppercase">Quantity</th><th className="px-6 py-4 text-[10px] font-black text-slate-400 uppercase">Status</th><th className="px-6 py-4 text-[10px] font-black text-slate-400 uppercase text-right">Date</th></tr>
+                                    </thead>
+                                    <tbody className="divide-y divide-slate-100">
+                                        {requests.filter(r => r.requestedBy === currentUser.name).map(req => (
+                                            <tr key={req.id} className="hover:bg-slate-50 transition-colors">
+                                                <td className="px-6 py-4 font-bold text-slate-800">{req.ingredientName}</td>
+                                                <td className="px-6 py-4 text-xs font-bold text-slate-500">{req.quantity} {req.unit}</td>
+                                                <td className="px-6 py-4">{getStatusBadge(req.status)}</td>
+                                                <td className="px-6 py-4 text-right text-[10px] font-bold text-slate-400">{format(new Date(req.requestedAt), 'MMM dd, HH:mm')}</td>
+                                            </tr>
+                                        ))}
+                                    </tbody>
+                                </table>
+                            </div>
+                        </div>
+                    )}
+                </div>
+
+                {(isCartOpen || cart.length > 0) && (
+                    <div className={`w-full lg:w-96 bg-white rounded-3xl shadow-2xl border border-slate-200 flex flex-col ${isCartOpen ? 'flex' : 'hidden lg:flex'} animate-in slide-in-from-right-4`}>
+                        <div className="p-6 border-b border-slate-100 flex justify-between items-center bg-slate-50/50 rounded-t-3xl">
+                            <h3 className="font-black text-lg flex items-center gap-2 text-slate-800"><ShoppingCart size={22} className="text-blue-600"/> Request List</h3>
+                            <button onClick={() => setIsCartOpen(false)} className="lg:hidden text-slate-400"><X size={20}/></button>
+                        </div>
+                        <div className="flex-1 overflow-y-auto p-4 space-y-3">
+                            {cart.length === 0 ? (
+                                <div className="h-full flex flex-col items-center justify-center text-slate-300 gap-2 opacity-50">
+                                    <Package size={48}/><p className="font-black text-sm uppercase tracking-tighter">List is empty</p>
+                                </div>
+                            ) : (
+                                cart.map(item => (
+                                    <div key={item.ingredient.id} className="p-4 bg-slate-50 rounded-2xl border border-slate-100 space-y-3 relative group">
+                                        <button onClick={() => setCart(cart.filter(c => c.ingredient.id !== item.ingredient.id))} className="absolute top-2 right-2 text-slate-300 hover:text-red-500"><XCircle size={18}/></button>
+                                        <div><p className="font-black text-slate-800 text-sm leading-tight">{item.ingredient.name}</p><p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">{item.ingredient.unit}</p></div>
+                                        <div className="grid grid-cols-2 gap-2">
+                                            <div><label className="text-[9px] font-black text-slate-400 uppercase">Qty Needed</label><input type="number" value={item.quantity === 0 ? '' : item.quantity} onChange={(e) => setCart(cart.map(c => c.ingredient.id === item.ingredient.id ? {...c, quantity: parseFloat(e.target.value)} : c))} className="w-full bg-white border border-slate-200 rounded-lg px-2 py-1.5 text-xs font-bold" /></div>
+                                            <div><label className="text-[9px] font-black text-slate-400 uppercase">Urgency</label><select value={item.urgency} onChange={(e) => setCart(cart.map(c => c.ingredient.id === item.ingredient.id ? {...c, urgency: e.target.value as any} : c))} className="w-full bg-white border border-slate-200 rounded-lg px-2 py-1 text-xs font-bold"><option value="LOW">Low</option><option value="MEDIUM">Med</option><option value="HIGH">High</option></select></div>
+                                        </div>
+                                    </div>
+                                ))
+                            )}
+                        </div>
+                        <div className="p-6 border-t border-slate-100 bg-slate-50/50 rounded-b-3xl">
+                            <button onClick={submitRequisition} disabled={cart.length === 0} className="w-full py-4 bg-blue-600 text-white font-black rounded-2xl shadow-xl shadow-blue-100 flex items-center justify-center gap-2 hover:bg-blue-700 transition-all disabled:opacity-50 uppercase tracking-tight">SUBMIT TO MANAGER <ArrowRight size={18}/></button>
+                        </div>
+                    </div>
+                )}
+            </div>
+        )}
       </div>
 
-      {/* MODAL: CUSTOM REQUEST (CHEF) */}
+      {/* Modal: Add/Edit Catalog Item */}
+      {showAddCatalogModal && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4">
+              <div className="bg-white rounded-3xl shadow-2xl p-6 w-full max-w-md animate-in zoom-in-95">
+                  <div className="flex justify-between items-center mb-6">
+                      <h3 className="text-xl font-black flex items-center gap-2">{editingIngredient ? <Edit3 className="text-blue-600"/> : <Archive className="text-blue-600"/>} {editingIngredient ? 'Edit Item' : 'New Catalog Item'}</h3>
+                      <button onClick={() => setShowAddCatalogModal(false)} className="text-slate-400"><X size={24}/></button>
+                  </div>
+                  <form onSubmit={handleSaveCatalogItem} className="space-y-4">
+                      <div><label className="text-[10px] font-black text-slate-400 uppercase block mb-1">Item Name *</label><input autoFocus type="text" value={catForm.name} onChange={e => setCatForm({...catForm, name: e.target.value})} required className="w-full px-4 py-2 border rounded-xl font-bold" placeholder="e.g. Saffron" /></div>
+                      <div className="grid grid-cols-2 gap-4">
+                          <div><label className="text-[10px] font-black text-slate-400 uppercase block mb-1">Category</label><input type="text" value={catForm.category} onChange={e => setCatForm({...catForm, category: e.target.value})} className="w-full px-4 py-2 border rounded-xl font-bold" placeholder="Spices" /></div>
+                          <div><label className="text-[10px] font-black text-slate-400 uppercase block mb-1">Unit</label><input type="text" value={catForm.unit} onChange={e => setCatForm({...catForm, unit: e.target.value})} required className="w-full px-4 py-2 border rounded-xl font-bold" placeholder="kg" /></div>
+                      </div>
+                      <div><label className="text-[10px] font-black text-slate-400 uppercase block mb-1">Market Cost per Unit (₹) *</label><input type="number" step="0.01" value={catForm.cost} onChange={e => setCatForm({...catForm, cost: e.target.value})} required className="w-full px-4 py-2 border rounded-xl font-bold" placeholder="0.00" /></div>
+                      <button type="submit" className="w-full py-4 bg-slate-900 text-white font-black rounded-2xl shadow-xl hover:bg-black transition-all uppercase tracking-tight">{editingIngredient ? 'Update Definition' : 'Save to Master Catalog'}</button>
+                  </form>
+              </div>
+          </div>
+      )}
+
+      {/* Modal: Custom Request (Chef) */}
       {showCustomReqModal && (
-          <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm animate-in fade-in">
-              <div className="bg-white rounded-2xl shadow-xl p-6 w-full max-w-md">
-                  <div className="flex justify-between items-center mb-4">
-                      <h3 className="text-lg font-bold text-slate-800 flex items-center gap-2"><FilePlus size={20} /> Request Custom Item</h3>
-                      <button onClick={() => setShowCustomReqModal(false)} className="text-slate-400 hover:text-slate-600">
-                          <XCircle size={20} />
-                      </button>
+          <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4">
+              <div className="bg-white rounded-3xl shadow-2xl p-6 w-full max-w-md animate-in zoom-in-95">
+                  <div className="flex justify-between items-center mb-6">
+                      <h3 className="text-xl font-black flex items-center gap-2"><FilePlus className="text-blue-600"/> Request New Item</h3>
+                      <button onClick={() => setShowCustomReqModal(false)} className="text-slate-400"><X size={24}/></button>
                   </div>
                   <div className="space-y-4">
-                      <div>
-                          <label className="block text-sm font-medium text-slate-700 mb-1">Item Name *</label>
-                          <input type="text" value={customReqName} onChange={e => setCustomReqName(e.target.value)} className="w-full px-3 py-2 border rounded-lg" placeholder="e.g. Truffle Oil" />
-                      </div>
+                      <div><label className="text-[10px] font-black text-slate-400 uppercase block mb-1">Item Name *</label><input type="text" value={customReq.name} onChange={e => setCustomReq({...customReq, name: e.target.value})} className="w-full px-4 py-2 border rounded-xl font-bold" placeholder="e.g. Exotic Herbs" /></div>
                       <div className="grid grid-cols-2 gap-4">
-                          <div>
-                            <label className="block text-sm font-medium text-slate-700 mb-1">Quantity *</label>
-                            <input type="number" value={customReqQty} onChange={e => setCustomReqQty(e.target.value)} className="w-full px-3 py-2 border rounded-lg" placeholder="0" />
-                          </div>
-                          <div>
-                            <label className="block text-sm font-medium text-slate-700 mb-1">Unit *</label>
-                            <input type="text" value={customReqUnit} onChange={e => setCustomReqUnit(e.target.value)} className="w-full px-3 py-2 border rounded-lg" placeholder="bottle" />
-                          </div>
+                          <div><label className="text-[10px] font-black text-slate-400 uppercase block mb-1">Qty *</label><input type="number" value={customReq.qty} onChange={e => setCustomReq({...customReq, qty: e.target.value})} className="w-full px-4 py-2 border rounded-xl font-bold" placeholder="0" /></div>
+                          <div><label className="text-[10px] font-black text-slate-400 uppercase block mb-1">Unit *</label><input type="text" value={customReq.unit} onChange={e => setCustomReq({...customReq, unit: e.target.value})} className="w-full px-4 py-2 border rounded-xl font-bold" placeholder="pkt" /></div>
                       </div>
-                      <div>
-                          <label className="block text-sm font-medium text-slate-700 mb-1">Est. Price / Unit (₹) (Optional)</label>
-                          <input type="number" value={customReqPrice} onChange={e => setCustomReqPrice(e.target.value)} className="w-full px-3 py-2 border rounded-lg" placeholder="0.00" />
-                      </div>
-                      <div>
-                          <label className="block text-sm font-medium text-slate-700 mb-1">Preferred Supplier / Link</label>
-                          <input type="text" value={customReqSupplier} onChange={e => setCustomReqSupplier(e.target.value)} className="w-full px-3 py-2 border rounded-lg" placeholder="e.g. Amazon URL or Supplier Name" />
-                      </div>
-                      <div>
-                          <label className="block text-sm font-medium text-slate-700 mb-1">Notes</label>
-                          <textarea value={customReqNote} onChange={e => setCustomReqNote(e.target.value)} className="w-full px-3 py-2 border rounded-lg h-20" placeholder="Brand preference, delivery instructions, etc."></textarea>
-                      </div>
-                      <button onClick={handleCustomRequestSubmit} className="w-full py-3 bg-blue-600 text-white font-bold rounded-lg hover:bg-blue-700">Submit Request</button>
+                      <div><label className="text-[10px] font-black text-slate-400 uppercase block mb-1">Notes</label><textarea value={customReq.note} onChange={e => setCustomReq({...customReq, note: e.target.value})} className="w-full px-4 py-2 border rounded-xl h-20 font-medium resize-none" placeholder="Brand, size, or quality details..."></textarea></div>
+                      <button onClick={() => { 
+                          if(!customReq.name || !customReq.qty) return alert("Fill required fields");
+                          onRequestAdd({
+                              id: `req-cust-${Date.now()}`, ingredientId: `custom-${Date.now()}`, ingredientName: customReq.name,
+                              quantity: parseFloat(customReq.qty), unit: customReq.unit || 'unit', urgency: RequisitionUrgency.MEDIUM,
+                              status: RequisitionStatus.PENDING, requestedBy: currentUser.name, requestedAt: new Date(), notes: customReq.note
+                          });
+                          setShowCustomReqModal(false); setCustomReq({name:'', qty:'', unit:'', price:'', note:'', supplier:''});
+                          alert("Request sent."); setActiveTab('history');
+                      }} className="w-full py-4 bg-blue-600 text-white font-black rounded-2xl shadow-xl uppercase tracking-tight">SUBMIT CUSTOM REQUEST</button>
                   </div>
               </div>
           </div>
       )}
 
-      {/* MODAL: PURCHASE ORDER VIEW */}
+      {/* PO Print Preview Modal */}
       {poRequest && (
-           <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm animate-in fade-in">
-              <div className="bg-white shadow-2xl p-8 w-full max-w-2xl transform transition-all scale-100 min-h-[600px] flex flex-col">
-                  {/* PO Print Layout */}
-                  <div className="flex-1 border-2 border-slate-800 p-8" id="purchase-order">
-                      <div className="flex justify-between items-start mb-8 border-b-2 border-slate-800 pb-4">
-                          <div>
-                              <h1 className="text-3xl font-serif font-bold text-slate-900">PURCHASE ORDER</h1>
-                              <p className="text-slate-600 text-sm mt-1">Bihari Chatkara Pvt Ltd.</p>
-                              <p className="text-slate-500 text-xs">Patna, Bihar - 800001</p>
-                          </div>
-                          <div className="text-right">
-                              <p className="font-bold text-lg">PO #: {`PO-${poRequest.id.split('-')[1]}`}</p>
-                              <p className="text-sm">Date: {format(new Date(), 'dd MMM yyyy')}</p>
-                          </div>
-                      </div>
-
-                      <div className="mb-8">
-                          <h3 className="font-bold text-slate-800 border-b border-slate-300 mb-2 uppercase text-xs tracking-wider">Vendor</h3>
-                          {poRequest.preferredSupplier ? (
-                              <p className="text-lg">{poRequest.preferredSupplier}</p>
-                          ) : (
-                              <p className="text-lg italic text-slate-400">[ General Market Vendor ]</p>
-                          )}
-                      </div>
-
-                      <div className="mb-8">
-                          <table className="w-full text-left">
-                              <thead className="bg-slate-100">
-                                  <tr>
-                                      <th className="py-2 px-2 border border-slate-300">Item Name</th>
-                                      <th className="py-2 px-2 border border-slate-300">Quantity</th>
-                                      <th className="py-2 px-2 border border-slate-300">Unit</th>
-                                      <th className="py-2 px-2 border border-slate-300 text-right">Est. Unit Cost</th>
-                                      <th className="py-2 px-2 border border-slate-300 text-right">Total</th>
-                                  </tr>
-                              </thead>
-                              <tbody>
-                                  <tr>
-                                      <td className="py-2 px-2 border border-slate-300">{poRequest.ingredientName}</td>
-                                      <td className="py-2 px-2 border border-slate-300">{poRequest.quantity}</td>
-                                      <td className="py-2 px-2 border border-slate-300">{poRequest.unit}</td>
-                                      <td className="py-2 px-2 border border-slate-300 text-right">₹{poRequest.estimatedUnitCost || 0}</td>
-                                      <td className="py-2 px-2 border border-slate-300 text-right font-bold">₹{((poRequest.estimatedUnitCost || 0) * poRequest.quantity).toFixed(2)}</td>
-                                  </tr>
-                              </tbody>
-                          </table>
-                      </div>
-
-                      <div className="mt-12 flex justify-between items-end">
-                          <div className="w-1/2">
-                              {poRequest.notes && (
-                                  <>
-                                      <p className="font-bold text-xs uppercase mb-1">Notes / Instructions:</p>
-                                      <p className="text-sm bg-slate-50 p-2 border border-slate-200">{poRequest.notes}</p>
-                                  </>
-                              )}
-                          </div>
-                          <div className="text-center">
-                              <div className="border-b border-black w-48 mb-2"></div>
-                              <p className="text-xs font-bold uppercase">Authorized Signature</p>
-                          </div>
-                      </div>
-                  </div>
-
-                  <div className="flex justify-end gap-3 mt-4 print:hidden">
-                       <button onClick={() => setPoRequest(null)} className="px-4 py-2 text-slate-600 hover:bg-slate-100 rounded">Close</button>
-                       <button onClick={() => window.print()} className="px-6 py-2 bg-slate-900 text-white rounded font-bold flex items-center gap-2 hover:bg-slate-800">
-                           <Printer size={18} /> Print PO
-                       </button>
-                  </div>
-              </div>
+           <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/80 backdrop-blur-sm p-4 overflow-y-auto">
+               <div className="bg-white shadow-2xl p-8 w-full max-w-2xl rounded-lg animate-in zoom-in-95">
+                    <div id="purchase-order" className="border-2 border-slate-900 p-8 font-serif">
+                        <div className="flex justify-between border-b-2 border-slate-900 pb-4 mb-8">
+                            <div><h1 className="text-3xl font-black">PURCHASE ORDER</h1><p className="text-sm">Bihari Chatkara Enterprise</p></div>
+                            <div className="text-right text-sm font-bold"><p>PO #: {poRequest.id.slice(-6).toUpperCase()}</p><p>DATE: {format(new Date(), 'dd-MMM-yyyy')}</p></div>
+                        </div>
+                        <div className="mb-8 grid grid-cols-2 gap-8 text-sm">
+                            <div><h4 className="font-black uppercase border-b mb-2">Ship To:</h4><p>Bihari Chatkara Kitchen</p><p>Noida Sector 45 Branch</p></div>
+                            <div><h4 className="font-black uppercase border-b mb-2">Supplier:</h4><p className="italic text-slate-400">[ Market Local Vendor ]</p></div>
+                        </div>
+                        <table className="w-full text-left text-sm mb-12 border-collapse">
+                            <thead><tr className="bg-slate-100"><th className="border p-2">ITEM DESCRIPTION</th><th className="border p-2 text-center">QTY</th><th className="border p-2">UNIT</th><th className="border p-2 text-right">EST. COST</th></tr></thead>
+                            <tbody><tr><td className="border p-2 font-bold">{poRequest.ingredientName}</td><td className="border p-2 text-center">{poRequest.quantity}</td><td className="border p-2">{poRequest.unit}</td><td className="border p-2 text-right">₹{poRequest.estimatedUnitCost || 0}</td></tr></tbody>
+                        </table>
+                        <div className="flex justify-between items-end mt-20">
+                            <div className="w-1/2 text-xs border-t pt-2">Authorized Signatory</div>
+                            <div className="text-right font-black text-xl">TOTAL: ₹{((poRequest.estimatedUnitCost || 0) * poRequest.quantity).toFixed(2)}</div>
+                        </div>
+                    </div>
+                    <div className="mt-8 flex justify-end gap-3 no-print">
+                        <button onClick={() => setPoRequest(null)} className="px-6 py-2 font-bold text-slate-500">CANCEL</button>
+                        <button onClick={() => window.print()} className="px-8 py-2 bg-black text-white font-black rounded-lg flex items-center gap-2"><Printer size={18}/> PRINT ORDER</button>
+                    </div>
+               </div>
            </div>
       )}
-
-      {/* MODAL: ADD TO CATALOG (MANAGER) */}
-      {showAddCatalogModal && (
-          <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm animate-in fade-in">
-              <div className="bg-white rounded-2xl shadow-xl p-6 w-full max-w-md">
-                  <div className="flex justify-between items-center mb-4">
-                      <h3 className="text-lg font-bold text-slate-800 flex items-center gap-2"><Archive size={20} /> Add Item to Catalog</h3>
-                      <button onClick={() => setShowAddCatalogModal(false)} className="text-slate-400 hover:text-slate-600">
-                          <XCircle size={20} />
-                      </button>
-                  </div>
-                  <div className="space-y-4">
-                      <div className="bg-blue-50 p-3 rounded text-sm text-blue-700 border border-blue-100">
-                          Adding an item here makes it available for all chefs to order via the Storefront.
-                      </div>
-                      <div>
-                          <label className="block text-sm font-medium text-slate-700 mb-1">Item Name *</label>
-                          <input type="text" value={newCatName} onChange={e => setNewCatName(e.target.value)} className="w-full px-3 py-2 border rounded-lg" placeholder="e.g. Saffron" />
-                      </div>
-                      <div className="grid grid-cols-2 gap-4">
-                          <div>
-                            <label className="block text-sm font-medium text-slate-700 mb-1">Category</label>
-                            <input type="text" value={newCatCategory} onChange={e => setNewCatCategory(e.target.value)} className="w-full px-3 py-2 border rounded-lg" placeholder="Spices" />
-                          </div>
-                          <div>
-                            <label className="block text-sm font-medium text-slate-700 mb-1">Unit</label>
-                            <input type="text" value={newCatUnit} onChange={e => setNewCatUnit(e.target.value)} className="w-full px-3 py-2 border rounded-lg" placeholder="gram" />
-                          </div>
-                      </div>
-                      <div>
-                          <label className="block text-sm font-medium text-slate-700 mb-1">Unit Cost (₹) *</label>
-                          <input type="number" value={newCatCost} onChange={e => setNewCatCost(e.target.value)} className="w-full px-3 py-2 border rounded-lg" placeholder="0.00" />
-                      </div>
-                      <button onClick={handleAddCatalogItem} className="w-full py-3 bg-slate-800 text-white font-bold rounded-lg hover:bg-slate-900">Add to System</button>
-                  </div>
-              </div>
-          </div>
-      )}
-
     </div>
   );
 };

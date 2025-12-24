@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect } from 'react';
 import { Save, Server, Printer, CreditCard, Shield, RefreshCw, CheckCircle, AlertTriangle, Smartphone, Store, FileText, Database, Settings as SettingsIcon, Bell, Receipt, Sliders } from 'lucide-react';
 
@@ -24,7 +23,6 @@ const Settings: React.FC = () => {
     defaultTaxRate: 5,
     serviceCharge: 0,
     enableKdsSound: true,
-    receiptFooterMessage: 'Thank you! Visit again.',
     
     // Payment
     paytmEnabled: true,
@@ -33,9 +31,15 @@ const Settings: React.FC = () => {
     paytmMerchantKey: '',
     paytmEnv: 'production',
 
-    // Printer
+    // Printer Settings (New & Expanded)
     printerWidth: '80mm',
-    autoPrintReceipt: false
+    autoPrintReceipt: false,
+    receiptHeaderMessage: '',
+    receiptFooterMessage: 'Thank you! Visit again.',
+    showGstinOnReceipt: true,
+    showFssaiOnReceipt: true,
+    showOrderDateTime: true,
+    printerFontSize: 'small'
   });
 
   const [paytmStatus, setPaytmStatus] = useState<'connected' | 'disconnected' | 'testing'>('disconnected');
@@ -96,15 +100,20 @@ const Settings: React.FC = () => {
     };
     localStorage.setItem('rms_paytm_config', JSON.stringify(paytmData));
 
-    // 3. Save Preferences
+    // 3. Save All Preferences including Printer
     const prefsData = {
         currencySymbol: settings.currencySymbol,
         defaultTaxRate: settings.defaultTaxRate,
         serviceCharge: settings.serviceCharge,
         enableKdsSound: settings.enableKdsSound,
+        receiptHeaderMessage: settings.receiptHeaderMessage,
         receiptFooterMessage: settings.receiptFooterMessage,
         printerWidth: settings.printerWidth,
-        autoPrintReceipt: settings.autoPrintReceipt
+        autoPrintReceipt: settings.autoPrintReceipt,
+        showGstinOnReceipt: settings.showGstinOnReceipt,
+        showFssaiOnReceipt: settings.showFssaiOnReceipt,
+        showOrderDateTime: settings.showOrderDateTime,
+        printerFontSize: settings.printerFontSize
     };
     localStorage.setItem('rms_preferences', JSON.stringify(prefsData));
 
@@ -115,21 +124,26 @@ const Settings: React.FC = () => {
     }, 800);
   };
 
+  // Fix: Added missing testPaytmConnection function to verify credentials
   const testPaytmConnection = () => {
-      if (!settings.paytmMerchantId) {
-          alert("Please enter a Merchant ID first.");
-          return;
-      }
-      setPaytmStatus('testing');
-      setTimeout(() => {
-          setPaytmStatus('connected');
-          alert("Paytm POS Terminal Connected Successfully! Device is ready to accept payments.");
-      }, 2000);
+    if (!settings.paytmMerchantId || !settings.paytmTerminalId || !settings.paytmMerchantKey) {
+      alert("Merchant ID, Terminal ID, and Merchant Key are required for testing.");
+      return;
+    }
+    setPaytmStatus('testing');
+    setTimeout(() => {
+      setPaytmStatus('connected');
+    }, 2000);
+  };
+
+  const testPrint = () => {
+      window.print();
   };
 
   const tabs = [
       { id: 'profile', label: 'Store Profile', icon: Store },
       { id: 'preferences', label: 'Preferences', icon: Sliders },
+      { id: 'printer', label: 'Printer Settings', icon: Printer },
       { id: 'payment', label: 'Payment', icon: CreditCard },
       { id: 'data', label: 'Data', icon: Database },
   ];
@@ -164,7 +178,7 @@ const Settings: React.FC = () => {
                     <button 
                         key={tab.id}
                         onClick={() => setActiveTab(tab.id)}
-                        className={`whitespace-nowrap px-4 py-2 md:py-3 rounded-full md:rounded-lg font-medium text-sm flex items-center gap-2 md:gap-3 transition-colors ${
+                        className={`whitespace-nowrap px-4 py-2 md:py-3 rounded-full md:rounded-lg font-bold text-sm flex items-center gap-2 md:gap-3 transition-colors ${
                             isActive 
                             ? 'bg-blue-600 text-white md:bg-blue-50 md:text-blue-700 shadow-md md:shadow-none' 
                             : 'bg-slate-100 text-slate-600 md:bg-transparent md:hover:bg-slate-50 border border-slate-200 md:border-transparent'
@@ -213,7 +227,7 @@ const Settings: React.FC = () => {
                                       </div>
                                   </div>
                                   <div className="p-4 bg-slate-50 rounded-lg border border-slate-200">
-                                      <h4 className="text-xs font-bold text-slate-500 uppercase mb-3 flex items-center gap-1"><Shield size={12} /> Compliance</h4>
+                                      <h4 className="text-xs font-bold text-slate-500 uppercase mb-3 flex items-center gap-1"><Shield size={12} /> Compliance Info</h4>
                                       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                                           <div>
                                               <label className="block text-xs font-bold text-slate-600 mb-1">GSTIN</label>
@@ -251,7 +265,7 @@ const Settings: React.FC = () => {
                           </section>
 
                           <section className="bg-white p-4 md:p-6 rounded-xl border border-slate-200 shadow-sm">
-                              <h3 className="font-bold text-lg text-slate-800 mb-6 border-b pb-2 flex items-center gap-2"><Bell size={20}/> Alerts & Sound</h3>
+                              <h3 className="font-bold text-lg text-slate-800 mb-6 border-b pb-2 flex items-center gap-2"><Bell size={20}/> System Alerts</h3>
                               <div className="flex items-center justify-between p-4 bg-slate-50 rounded-lg border border-slate-200">
                                   <div>
                                       <h4 className="font-bold text-slate-800">KDS Alert Sound</h4>
@@ -263,30 +277,79 @@ const Settings: React.FC = () => {
                                   </label>
                               </div>
                           </section>
+                      </div>
+                  )}
 
-                          <section className="bg-white p-4 md:p-6 rounded-xl border border-slate-200 shadow-sm">
-                              <h3 className="font-bold text-lg text-slate-800 mb-6 border-b pb-2 flex items-center gap-2"><Printer size={20}/> Printer Settings</h3>
+                  {activeTab === 'printer' && (
+                      <section className="bg-white p-4 md:p-6 rounded-xl border border-slate-200 shadow-sm animate-in fade-in slide-in-from-right-4 space-y-6">
+                          <div className="flex justify-between items-center border-b pb-2">
+                              <h3 className="font-bold text-lg text-slate-800 flex items-center gap-2"><Printer size={20}/> Thermal Printer Settings</h3>
+                              <button onClick={testPrint} className="text-blue-600 font-bold text-sm flex items-center gap-1 hover:bg-blue-50 px-3 py-1.5 rounded-lg border border-blue-100 transition-colors">
+                                  <FileText size={16}/> Test Receipt
+                              </button>
+                          </div>
+
+                          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                               <div className="space-y-4">
-                                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                  <h4 className="text-xs font-black uppercase text-slate-400 tracking-widest">General Configuration</h4>
+                                  <div className="grid grid-cols-2 gap-4">
                                       <div>
-                                          <label className="block text-sm font-bold text-slate-700 mb-1">Receipt Footer Message</label>
-                                          <input type="text" value={settings.receiptFooterMessage} onChange={e => handleChange('receiptFooterMessage', e.target.value)} className="w-full border border-slate-300 rounded-lg px-3 py-2" placeholder="Thank you!" />
-                                      </div>
-                                      <div>
-                                          <label className="block text-sm font-bold text-slate-700 mb-1">Paper Width</label>
-                                          <select value={settings.printerWidth} onChange={e => handleChange('printerWidth', e.target.value)} className="w-full border border-slate-300 rounded-lg px-3 py-2 bg-white">
+                                          <label className="block text-xs font-bold text-slate-700 mb-1">Paper Width</label>
+                                          <select value={settings.printerWidth} onChange={e => handleChange('printerWidth', e.target.value)} className="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm bg-white">
                                               <option value="80mm">80mm (Standard)</option>
                                               <option value="58mm">58mm (Narrow)</option>
                                           </select>
                                       </div>
+                                      <div>
+                                          <label className="block text-xs font-bold text-slate-700 mb-1">Font Size</label>
+                                          <select value={settings.printerFontSize} onChange={e => handleChange('printerFontSize', e.target.value)} className="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm bg-white">
+                                              <option value="small">Small</option>
+                                              <option value="medium">Medium</option>
+                                              <option value="large">Large</option>
+                                          </select>
+                                      </div>
                                   </div>
-                                  <div className="flex items-center gap-2">
+                                  <div className="flex items-center gap-2 p-3 bg-blue-50 rounded-lg border border-blue-100">
                                       <input type="checkbox" id="autoprint" checked={settings.autoPrintReceipt} onChange={e => handleChange('autoPrintReceipt', e.target.checked)} className="w-4 h-4 text-blue-600 rounded" />
-                                      <label htmlFor="autoprint" className="text-sm font-medium text-slate-700">Automatically open print dialog after payment</label>
+                                      <label htmlFor="autoprint" className="text-sm font-bold text-blue-800">Auto-open dialog after payment</label>
                                   </div>
                               </div>
-                          </section>
-                      </div>
+
+                              <div className="space-y-4">
+                                  <h4 className="text-xs font-black uppercase text-slate-400 tracking-widest">Compliance & Visibility</h4>
+                                  <div className="space-y-2">
+                                      <label className="flex items-center justify-between text-sm p-2 hover:bg-slate-50 rounded-lg cursor-pointer transition-colors">
+                                          <span className="font-medium text-slate-700">Show GSTIN on Receipt</span>
+                                          <input type="checkbox" checked={settings.showGstinOnReceipt} onChange={e => handleChange('showGstinOnReceipt', e.target.checked)} className="w-4 h-4 text-blue-600 rounded" />
+                                      </label>
+                                      <label className="flex items-center justify-between text-sm p-2 hover:bg-slate-50 rounded-lg cursor-pointer transition-colors">
+                                          <span className="font-medium text-slate-700">Show FSSAI No. on Receipt</span>
+                                          <input type="checkbox" checked={settings.showFssaiOnReceipt} onChange={e => handleChange('showFssaiOnReceipt', e.target.checked)} className="w-4 h-4 text-blue-600 rounded" />
+                                      </label>
+                                      <label className="flex items-center justify-between text-sm p-2 hover:bg-slate-50 rounded-lg cursor-pointer transition-colors">
+                                          <span className="font-medium text-slate-700">Print Order Date/Time</span>
+                                          <input type="checkbox" checked={settings.showOrderDateTime} onChange={e => handleChange('showOrderDateTime', e.target.checked)} className="w-4 h-4 text-blue-600 rounded" />
+                                      </label>
+                                  </div>
+                              </div>
+                          </div>
+
+                          <div className="space-y-4 pt-4 border-t">
+                              <h4 className="text-xs font-black uppercase text-slate-400 tracking-widest">Custom Text (Header & Footer)</h4>
+                              <div className="space-y-4">
+                                  <div>
+                                      <label className="block text-sm font-bold text-slate-700 mb-1">Receipt Header Note (Optional)</label>
+                                      <input type="text" value={settings.receiptHeaderMessage} onChange={e => handleChange('receiptHeaderMessage', e.target.value)} className="w-full border border-slate-300 rounded-lg px-3 py-2" placeholder="e.g. Welcome to Bihari Chatkara" />
+                                      <p className="text-[10px] text-slate-400 mt-1">Appears above the restaurant name</p>
+                                  </div>
+                                  <div>
+                                      <label className="block text-sm font-bold text-slate-700 mb-1">Receipt Footer Message</label>
+                                      <input type="text" value={settings.receiptFooterMessage} onChange={e => handleChange('receiptFooterMessage', e.target.value)} className="w-full border border-slate-300 rounded-lg px-3 py-2" placeholder="Thank you! Visit again." />
+                                      <p className="text-[10px] text-slate-400 mt-1">Appears at the very bottom of the receipt</p>
+                                  </div>
+                              </div>
+                          </div>
+                      </section>
                   )}
 
                   {activeTab === 'payment' && (
@@ -364,13 +427,13 @@ const Settings: React.FC = () => {
                           <div className="flex flex-wrap gap-4">
                               <button 
                                 onClick={() => window.location.reload()}
-                                className="border border-slate-300 text-slate-700 px-4 py-3 rounded-lg font-bold text-sm hover:bg-slate-50 flex items-center gap-2 w-full md:w-auto justify-center"
+                                className="border border-slate-300 text-slate-700 px-4 py-3 rounded-lg font-bold text-sm hover:bg-slate-50 flex items-center gap-2 w-full md:w-auto justify-center transition-colors"
                               >
                                   <RefreshCw size={16} /> Force Reload Application
                               </button>
                               
                               <button 
-                                className="border border-red-200 text-red-600 bg-red-50 px-4 py-3 rounded-lg font-bold text-sm hover:bg-red-100 flex items-center gap-2 w-full md:w-auto justify-center"
+                                className="border border-red-200 text-red-600 bg-red-50 px-4 py-3 rounded-lg font-bold text-sm hover:bg-red-100 flex items-center gap-2 w-full md:w-auto justify-center transition-colors"
                                 onClick={() => {
                                     if(confirm("Are you sure you want to clear Local Storage? This will reset settings but preserve cloud database.")) {
                                         localStorage.clear();

@@ -81,7 +81,7 @@ const initDb = async () => {
             server_name VARCHAR(100),
             status ENUM('NEW', 'IN_PROGRESS', 'READY', 'SERVED', 'CANCELLED') DEFAULT 'NEW',
             payment_status ENUM('PENDING', 'PAID', 'CANCELLED') DEFAULT 'PENDING',
-            payment_method ENUM('CASH', 'ONLINE', 'PAYTM_POS'),
+            payment_method ENUM('CASH', 'UPI', 'POS', 'ONLINE'),
             created_at DATETIME NOT NULL,
             completed_at DATETIME,
             tax_rate DECIMAL(5,2) DEFAULT 0.00,
@@ -90,15 +90,15 @@ const initDb = async () => {
 
         await ensureTable('order_items', `CREATE TABLE IF NOT EXISTS order_items (
             id VARCHAR(50) PRIMARY KEY,
-            orderId VARCHAR(50) NOT NULL,
+            order_id VARCHAR(50) NOT NULL,
             menu_item_id VARCHAR(50),
             name VARCHAR(100),
             quantity INT DEFAULT 1,
             price_at_order DECIMAL(10,2) NOT NULL,
             portion VARCHAR(20),
             modifiers JSON,
-            INDEX (orderId),
-            FOREIGN KEY (orderId) REFERENCES orders(id) ON DELETE CASCADE
+            INDEX (order_id),
+            FOREIGN KEY (order_id) REFERENCES orders(id) ON DELETE CASCADE
         )`);
 
         await ensureTable('expenses', `CREATE TABLE IF NOT EXISTS expenses (
@@ -145,11 +145,6 @@ const initDb = async () => {
             );
         }
 
-        const [columns] = await connection.query(`SHOW COLUMNS FROM ingredients LIKE 'barcode'`);
-        if (columns.length === 0) {
-            await connection.query("ALTER TABLE ingredients ADD COLUMN barcode VARCHAR(100)");
-        }
-
         isDbInitialized = true;
         console.log("[SYS-DB] Enterprise Data Layer Online.");
     } catch (e) {
@@ -174,18 +169,13 @@ const parseRow = (row, jsonFields = []) => {
         'total_visits': 'totalVisits', 'last_visit': 'lastVisit', 'receipt_image': 'receiptImage'
     };
     
-    // Fields that MUST be numbers to prevent .toFixed errors on frontend
     const numericFields = ['unitCost', 'stockQuantity', 'price', 'taxRate', 'discount', 'priceAtOrder', 'quantity', 'amount', 'estimatedUnitCost', 'loyaltyPoints', 'totalVisits'];
 
     const final = {};
     Object.keys(row).forEach(key => {
         const newKey = map[key] || key;
         let val = row[key];
-        
-        if (numericFields.includes(newKey)) {
-            val = val === null || val === undefined ? 0 : Number(val);
-        }
-        
+        if (numericFields.includes(newKey)) val = val === null || val === undefined ? 0 : Number(val);
         final[newKey] = val;
     });
 
@@ -220,7 +210,7 @@ api.get('/orders', async (req, res) => {
         const [orders] = await pool.query('SELECT * FROM orders ORDER BY created_at DESC LIMIT 200');
         const result = orders.map(o => parseRow(o));
         if (result.length > 0) {
-            const [allItems] = await pool.query(`SELECT * FROM order_items WHERE orderId IN (?)`, [result.map(o => o.id)]);
+            const [allItems] = await pool.query(`SELECT * FROM order_items WHERE order_id IN (?)`, [result.map(o => o.id)]);
             const itemsMap = {};
             allItems.forEach(item => {
                 const p = parseRow(item, ['modifiers']);
@@ -239,12 +229,12 @@ api.post('/orders', async (req, res) => {
     try {
         await connection.beginTransaction();
         await connection.query(
-            'INSERT INTO orders (id, table_number, server_name, status, payment_status, created_at, tax_rate, discount) VALUES (?, ?, ?, ?, ?, ?, ?, ?)', 
-            [o.id, o.tableNumber, o.serverName, o.status, o.paymentStatus, new Date(o.createdAt).toISOString().slice(0, 19).replace('T', ' '), o.taxRate || 0, o.discount || 0]
+            'INSERT INTO orders (id, table_number, server_name, status, payment_status, payment_method, created_at, tax_rate, discount) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)', 
+            [o.id, o.tableNumber, o.serverName, o.status, o.paymentStatus, o.paymentMethod || null, new Date(o.createdAt).toISOString().slice(0, 19).replace('T', ' '), o.taxRate || 0, o.discount || 0]
         );
         for (const i of (o.items || [])) {
             await connection.query(
-                'INSERT INTO order_items (id, orderId, menu_item_id, name, quantity, price_at_order, portion, modifiers) VALUES (?, ?, ?, ?, ?, ?, ?, ?)', 
+                'INSERT INTO order_items (id, order_id, menu_item_id, name, quantity, price_at_order, portion, modifiers) VALUES (?, ?, ?, ?, ?, ?, ?, ?)', 
                 [i.id, o.id, i.menuItemId, i.name, i.quantity, i.priceAtOrder, i.portion, JSON.stringify(i.modifiers || [])]
             );
         }
@@ -388,7 +378,7 @@ api.post('/customers', async (req, res) => {
     try {
         await pool.query(
             'INSERT INTO customers (id, name, phone, email, loyalty_points, total_visits, last_visit, notes) VALUES (?,?,?,?,?,?,?,?)',
-            [c.id, c.name, c.phone, c.email, c.loyaltyPoints, c.totalVisits, new Date(c.lastVisit).toISOString().slice(0, 19).replace('T', ' '), c.notes]
+            [c.id, c.name, c.phone, c.email, c.loyalty_points, c.total_visits, new Date(c.lastVisit).toISOString().slice(0, 19).replace('T', ' '), c.notes]
         );
         res.json({ success: true });
     } catch (err) { res.status(500).json({ error: err.message }); }

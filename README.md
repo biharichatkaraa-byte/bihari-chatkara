@@ -1,118 +1,65 @@
+# 🥘 Bihari Chatkara RMS
+> **Authentic Taste. Intelligent Management.**
 
-# 🥘 Bihari Chatkara - Restaurant Management System (RMS)
+Bihari Chatkara is a professional-grade Restaurant Management System (RMS) built to handle high-volume dining operations. It features a hybrid cloud/local data layer, an AI-powered culinary co-pilot, and an enterprise POS.
 
-A modern, comprehensive, and cloud-ready Restaurant Management System built to streamline operations from the table to the back office.
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
+[![React](https://img.shields.io/badge/React-18-blue)](https://react.dev/)
+[![Gemini AI](https://img.shields.io/badge/AI-Gemini_3-indigo)](https://ai.google.dev/)
 
-![License](https://img.shields.io/badge/license-MIT-blue.svg)
-![React](https://img.shields.io/badge/React-18-blue)
-![Vite](https://img.shields.io/badge/Vite-5-purple)
-![Tailwind](https://img.shields.io/badge/Tailwind-3-cyan)
-![Node](https://img.shields.io/badge/Node.js-18+-green)
+---
 
-## 🚀 Features
+## ✨ Features
 
-*   **Point of Sale (POS)**: Intuitive touch-interface for table management, order taking, and billing. Supports split payments and custom items.
-*   **Kitchen Display System (KDS)**: Real-time ticket management with color-coded urgency and preparation status tracking.
-*   **Inventory & Procurement**: Ingredient-level stock tracking with automated low-stock alerts and purchase requisition workflow (Chef → Manager → PO).
-*   **Staff Management**: Role-based access control (RBAC) for Managers, Chefs, and Servers with custom permission toggles.
-*   **Financials**: Expense tracking, daily sales reporting, and visual revenue analytics.
-*   **Hybrid Data Architecture**:
-    *   **Cloud Mode**: Connects to a robust MySQL backend for production.
-    *   **Local Demo Mode**: Automatically falls back to browser `localStorage` if the backend is unreachable, making it perfect for demos and offline testing.
+- **⚡ High-Performance POS**: Multi-terminal support with real-time table sync.
+- **👨‍🍳 Smart KDS**: Kitchen Display System with visual/audio alerts for orders > 15 mins.
+- **🤖 AI Co-Pilot**: Gemini 3 integrated for recipe generation, menu descriptions, and sales insights.
+- **📦 Inventory & Procurement**: Recipe-based stock deduction and PO generation.
+- **📊 Executive Analytics**: Deep-dive into cash vs. digital collections and profitability.
+- **☁️ Hybrid Sync**: Works offline (LocalStorage) and syncs instantly when the Node/MySQL backend is detected.
 
 ## 🛠️ Tech Stack
 
-*   **Frontend**: React 18, Tailwind CSS, Lucide React (Icons), Recharts (Analytics).
-*   **Build Tool**: Vite.
-*   **Backend**: Node.js, Express.
-*   **Database**: MySQL (using `mysql2` with connection pooling).
-*   **Deployment**: Ready for Vercel/Netlify (Frontend) and Google Cloud Run/App Engine (Backend).
+- **Frontend**: React 18, Tailwind CSS, Recharts, Lucide.
+- **AI**: Google Gemini 3 (Pro/Flash).
+- **Backend**: Node.js (Express), MySQL 8.
+- **Infrastructure**: Vite (Build tool), Vercel/Hostinger compatible.
 
-## ⚡ Getting Started
+## 🚀 Getting Started
 
-### Prerequisites
+### 1. Prerequisites
+- Node.js (v18+)
+- MySQL (Optional for cloud mode)
 
-*   Node.js (v18 or higher)
-*   npm or yarn
-*   *(Optional)* MySQL Server for full-stack mode.
-
-### 1. Clone the Repository
-
+### 2. Installation
 ```bash
-git clone https://github.com/yourusername/bihari-chatkara-rms.git
+git clone https://github.com/your-username/bihari-chatkara-rms.git
 cd bihari-chatkara-rms
 npm install
 ```
 
-### 2. Configuration
-
-Create a `.env` file in the root directory by copying the example:
-
+### 3. Setup
+Create a `.env` file based on the provided `.env.example`:
 ```bash
 cp .env.example .env
 ```
+Add your `API_KEY` from [Google AI Studio](https://aistudio.google.com/).
 
-Edit `.env` and add your database credentials.
-
-### 3. Running the Application
-
-#### Option A: Local Demo Mode (Frontend Only)
-*Ideal for quick testing or portfolios. No database required.*
-
-The app detects if the backend is unreachable and automatically switches to using your browser's Local Storage.
-
+### 4. Run Development
 ```bash
+# Frontend only
 npm run dev
-```
-Open [http://localhost:3000](http://localhost:3000) in your browser.
 
-#### Option B: Full Stack Mode
-*Production simulation with MySQL.*
-
-1. Ensure your MySQL server is running.
-2. The server automatically creates tables and seeds default data on the first run.
-
-```bash
-# Terminal 1: Start the Backend API
-npm start
-
-# Terminal 2: Start the Frontend
-npm run dev
+# Fullstack (Backend Server)
+npm run server
 ```
 
-## 🔐 Default Credentials
-
-When running in **Local Demo Mode** (or after fresh DB seeding), use these credentials:
-
+## 🔐 Credentials (Default)
 | Role | Email | Password |
-|------|-------|----------|
-| **Admin/Manager** | `admin@biharichatkara.com` | `admin123` |
+| :--- | :--- | :--- |
+| **Manager** | `admin@biharichatkara.com` | `admin123` |
 | **Chef** | `chef@biharichatkara.com` | `chef123` |
-| **Server** | `server@biharichatkara.com` | `server123` |
+| **Staff** | `server@biharichatkara.com` | `server123` |
 
-## 📦 Deployment
-
-### Frontend (Static)
-Run the build command to generate the `dist` folder.
-```bash
-npm run build
-```
-Upload the `dist` folder to any static host (Vercel, Netlify, GitHub Pages, Hostinger).
-
-### Backend (API)
-The `server.js` is production-ready.
-1. Set `NODE_ENV=production`.
-2. Configure environment variables on your cloud provider.
-3. Deploy to platforms like Google Cloud Run, Heroku, or DigitalOcean App Platform.
-
-## 🤝 Contributing
-
-1. Fork the Project
-2. Create your Feature Branch (`git checkout -b feature/AmazingFeature`)
-3. Commit your Changes (`git commit -m 'Add some AmazingFeature'`)
-4. Push to the Branch (`git push origin feature/AmazingFeature`)
-5. Open a Pull Request
-
-## 📄 License
-
-Distributed under the MIT License. See `LICENSE` for more information.
+---
+*Developed for Bihari Chatkara – Preserving the legacy of Bihari cuisine through technology.*

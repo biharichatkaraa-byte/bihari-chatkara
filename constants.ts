@@ -157,7 +157,8 @@ export const INITIAL_ORDERS: Order[] = [
     ],
     status: OrderStatus.SERVED,
     paymentStatus: PaymentStatus.PAID,
-    paymentMethod: PaymentMethod.PAYTM_POS,
+    // Fix: Changed PAYTM_POS to POS to match the enum definition in types.ts.
+    paymentMethod: PaymentMethod.POS,
     createdAt: new Date(Date.now() - 1000 * 60 * 45), // 45 mins ago
     taxRate: 5,
     discount: 0
