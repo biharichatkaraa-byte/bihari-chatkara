@@ -25,7 +25,8 @@ const KDS: React.FC<KDSProps> = ({ orders, updateOrderStatus, userRole, menuItem
 
   // Initialize Audio Context on Mount
   useEffect(() => {
-    const timer = setInterval(() => setNow(new Date()), 1000 * 60); // Update every minute for relative time
+    // Ticker updated every 10 seconds for high precision relative time
+    const timer = setInterval(() => setNow(new Date()), 10000); 
     
     // @ts-ignore - Safari support
     const AudioContextClass = window.AudioContext || window.webkitAudioContext;
@@ -124,7 +125,11 @@ const KDS: React.FC<KDSProps> = ({ orders, updateOrderStatus, userRole, menuItem
   const getTicketColor = (createdAt: Date | string, status: OrderStatus) => {
     if (status === OrderStatus.READY) return 'border-green-500 bg-green-50';
     
-    const created = new Date(createdAt);
+    let created;
+    try {
+        created = new Date(createdAt);
+    } catch(e) { return 'border-blue-200 bg-white'; }
+
     const mins = (now.getTime() - created.getTime()) / 60000;
     
     // Prioritization Logic: Flash Red if > 15 mins (Urgent/Late)
@@ -242,7 +247,6 @@ const KDS: React.FC<KDSProps> = ({ orders, updateOrderStatus, userRole, menuItem
 
                 <div className="p-4 flex-1 overflow-y-auto space-y-3">
                     {order.items.map(item => {
-                        // Prefer the snapshotted name on the order item, fallback to menu lookup
                         const displayName = item.name || menuItems.find(m => m.id === item.menuItemId)?.name || 'Custom Item';
                         const hasModifiers = item.modifiers && item.modifiers.length > 0;
                         

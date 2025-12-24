@@ -62,8 +62,16 @@ const Dashboard: React.FC<DashboardProps> = ({ orders, expenses = [], allData, u
     else if (filterType === '30days') interval = { start: subDays(now, 30), end: endOfDay(now) };
     else if (filterType === 'custom') interval = { start: new Date(customStart), end: new Date(customEnd) };
 
-    const filteredOrders = (orders || []).filter(o => isWithinInterval(new Date(o.createdAt), interval));
-    const filteredExpenses = (expenses || []).filter(e => isWithinInterval(new Date(e.date), interval));
+    const filteredOrders = (orders || []).filter(o => {
+        try {
+            return isWithinInterval(new Date(o.createdAt), interval);
+        } catch(e) { return false; }
+    });
+    const filteredExpenses = (expenses || []).filter(e => {
+        try {
+            return isWithinInterval(new Date(e.date), interval);
+        } catch(e) { return false; }
+    });
     return { orders: filteredOrders, expenses: filteredExpenses };
   }, [orders, expenses, filterType, customStart, customEnd]);
 
