@@ -1,12 +1,12 @@
-
 {
   "name": "Bihari Chatkara RMS",
-  "short_name": "RMS",
-  "start_url": "/",
+  "short_name": "Chatkara RMS",
+  "start_url": "./index.html",
   "display": "standalone",
-  "background_color": "#1e293b",
+  "background_color": "#0f172a",
   "theme_color": "#ea580c",
   "orientation": "portrait",
+  "description": "Enterprise-grade Restaurant Management System for Bihari Chatkara.",
   "icons": [
     {
       "src": "https://cdn-icons-png.flaticon.com/512/3448/3448609.png",

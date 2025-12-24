@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { Save, Server, Printer, CreditCard, Shield, RefreshCw, CheckCircle, AlertTriangle, Smartphone, Store, FileText, Database, Settings as SettingsIcon, Bell, Receipt, Sliders } from 'lucide-react';
+import { format } from 'date-fns';
 
 const Settings: React.FC = () => {
   const [isLoading, setIsLoading] = useState(false);
@@ -31,7 +32,7 @@ const Settings: React.FC = () => {
     paytmMerchantKey: '',
     paytmEnv: 'production',
 
-    // Printer Settings (New & Expanded)
+    // Printer Settings
     printerWidth: '80mm',
     autoPrintReceipt: false,
     receiptHeaderMessage: '',
@@ -81,7 +82,6 @@ const Settings: React.FC = () => {
   const handleSave = () => {
     setIsLoading(true);
     
-    // 1. Save Store Profile & Receipt Metadata
     const profileData = {
         name: settings.name, tagline: settings.tagline,
         address1: settings.address1, address2: settings.address2,
@@ -90,7 +90,6 @@ const Settings: React.FC = () => {
     };
     localStorage.setItem('rms_receipt_details', JSON.stringify(profileData));
     
-    // 2. Save Payment Config
     const paytmData = {
         enabled: settings.paytmEnabled,
         merchantId: settings.paytmMerchantId,
@@ -100,7 +99,6 @@ const Settings: React.FC = () => {
     };
     localStorage.setItem('rms_paytm_config', JSON.stringify(paytmData));
 
-    // 3. Save All Preferences including Printer
     const prefsData = {
         currencySymbol: settings.currencySymbol,
         defaultTaxRate: settings.defaultTaxRate,
@@ -124,7 +122,6 @@ const Settings: React.FC = () => {
     }, 800);
   };
 
-  // Fix: Added missing testPaytmConnection function to verify credentials
   const testPaytmConnection = () => {
     if (!settings.paytmMerchantId || !settings.paytmTerminalId || !settings.paytmMerchantKey) {
       alert("Merchant ID, Terminal ID, and Merchant Key are required for testing.");
@@ -140,6 +137,12 @@ const Settings: React.FC = () => {
       window.print();
   };
 
+  const fontSizeMap = {
+    small: '10px',
+    medium: '12px',
+    large: '14px'
+  };
+
   const tabs = [
       { id: 'profile', label: 'Store Profile', icon: Store },
       { id: 'preferences', label: 'Preferences', icon: Sliders },
@@ -151,6 +154,85 @@ const Settings: React.FC = () => {
   return (
     <div className="h-full flex flex-col relative overflow-hidden bg-slate-50">
       
+      {/* HIDDEN PRINTABLE TEST RECEIPT */}
+      <div 
+        id="printable-receipt" 
+        className="hidden print:block p-4 font-mono leading-tight bg-white text-black"
+        style={{ 
+           width: settings.printerWidth, 
+           fontSize: fontSizeMap[settings.printerFontSize as keyof typeof fontSizeMap] 
+        }}
+      >
+          <div className="text-center mb-4">
+             {settings.receiptHeaderMessage && <p className="mb-1 italic">{settings.receiptHeaderMessage}</p>}
+             <h1 className="text-lg font-bold uppercase">{settings.name}</h1>
+             <div className="mt-1">
+                {settings.address1 && <p>{settings.address1}</p>}
+                {settings.address2 && <p>{settings.address2}</p>}
+             </div>
+             <div className="mt-2">
+                 {settings.showGstinOnReceipt && settings.gstin && <p className="font-bold">GSTIN: {settings.gstin}</p>}
+                 {settings.showFssaiOnReceipt && settings.fssai && <p className="font-bold">FSSAI: {settings.fssai}</p>}
+             </div>
+             {settings.phone && <p className="mt-1">Phone: {settings.phone}</p>}
+          </div>
+
+          <div className="border-b border-black border-dashed mb-2"></div>
+          
+          <div className="flex justify-between mb-1 font-bold">
+             <span>Bill: #TEST-123</span>
+             <span>Table: 01</span>
+          </div>
+          
+          <div className="flex justify-between mb-2">
+             <span>Date: {format(new Date(), 'dd/MM/yy HH:mm')}</span>
+             <span>By: Admin</span>
+          </div>
+
+          <div className="border-b border-black border-dashed mb-2"></div>
+
+          <table className="w-full text-left mb-2">
+             <thead>
+                <tr className="border-b border-black border-dotted">
+                   <th className="py-1">Description</th>
+                   <th className="text-right">Qty</th>
+                   <th className="text-right">Amt</th>
+                </tr>
+             </thead>
+             <tbody>
+                <tr>
+                   <td className="py-1">Sample Item One</td>
+                   <td className="text-right align-top">2</td>
+                   <td className="text-right align-top">200.00</td>
+                </tr>
+                <tr>
+                   <td className="py-1">Sample Item Two (Half)</td>
+                   <td className="text-right align-top">1</td>
+                   <td className="text-right align-top">150.00</td>
+                </tr>
+             </tbody>
+          </table>
+
+          <div className="border-b border-black border-dashed mb-2"></div>
+
+          <div className="space-y-1">
+             <div className="flex justify-between"><span>Subtotal:</span><span>{settings.currencySymbol}350.00</span></div>
+             <div className="flex justify-between"><span>GST ({settings.defaultTaxRate}%):</span><span>{settings.currencySymbol}17.50</span></div>
+             <div className="flex justify-between font-bold text-base pt-1 border-t border-black border-dotted mt-1">
+                <span>NET TOTAL:</span>
+                <span>{settings.currencySymbol}367.50</span>
+             </div>
+          </div>
+
+          <div className="mt-4 border-b border-black border-dashed mb-2"></div>
+          <div className="text-center font-bold uppercase mb-2">Paid via CASH</div>
+
+          <div className="text-center mt-4">
+             <p className="font-bold">{settings.receiptFooterMessage}</p>
+             <p className="text-[0.7em] mt-3 opacity-50 italic">Powered by Bihari Chatkara Enterprise RMS</p>
+          </div>
+      </div>
+
       {/* Header */}
       <div className="bg-white px-4 md:px-6 py-4 border-b border-slate-200 flex justify-between items-center shadow-sm z-10 shrink-0">
         <div>

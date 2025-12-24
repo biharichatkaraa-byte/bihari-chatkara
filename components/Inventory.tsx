@@ -1,7 +1,6 @@
-
 import React, { useState, useEffect, useRef, useMemo } from 'react';
 import { MenuItem, Ingredient, MenuItemIngredient } from '../types';
-import { Plus, Trash2, Edit3, Save, X, FileSpreadsheet, Package, AlertTriangle, Search, ChevronRight, Check, Ban, ShoppingBag, DollarSign, Download, Trash, CheckSquare, Square } from 'lucide-react';
+import { Plus, Trash2, Edit3, Save, X, FileSpreadsheet, Package, AlertTriangle, Search, ChevronRight, Check, Ban, ShoppingBag, DollarSign, Download, Trash, CheckSquare, Square, ChevronLeft } from 'lucide-react';
 
 interface InventoryProps {
   ingredients: Ingredient[];
@@ -21,7 +20,6 @@ const Inventory: React.FC<InventoryProps> = ({
     ingredients, 
     menuItems, 
     onSave, 
-    // Fix: Destructure missing onDeleteIngredient and onBulkUpdateMenuItems from props
     onDeleteIngredient,
     onAddIngredient,
     onAddMenuItem,
@@ -35,14 +33,10 @@ const Inventory: React.FC<InventoryProps> = ({
   const [selectedItem, setSelectedItem] = useState<MenuItem | null>(null);
   const [searchTerm, setSearchTerm] = useState('');
   
-  // Selection state for bulk actions
   const [selectedMenuIds, setSelectedMenuIds] = useState<Set<string>>(new Set());
-
-  // Modal States
   const [showAddMenuModal, setShowAddMenuModal] = useState(false);
   const [showAddIngModal, setShowAddIngModal] = useState(false);
 
-  // Form States (Menu)
   const [menuName, setMenuName] = useState('');
   const [menuFullPrice, setMenuFullPrice] = useState('');
   const [menuHalfPrice, setMenuHalfPrice] = useState('');
@@ -50,20 +44,17 @@ const Inventory: React.FC<InventoryProps> = ({
   const [menuCategory, setMenuCategory] = useState('Main Course');
   const [menuDescription, setMenuDescription] = useState('');
   
-  // Form States (Ingredient)
   const [ingName, setIngName] = useState('');
   const [ingUnit, setIngUnit] = useState('kg');
   const [ingCost, setIngCost] = useState('');
   const [ingStock, setIngStock] = useState('');
 
-  // Recipe Editor States
   const [recipeIngId, setRecipeIngId] = useState('');
   const [recipeQty, setRecipeQty] = useState('');
 
   const fileInputRef = useRef<HTMLInputElement>(null);
   const menuFileInputRef = useRef<HTMLInputElement>(null);
 
-  // Robust CSV Parser
   const parseCSV = (text: string) => {
     const lines = text.split(/\r?\n/);
     return lines.map(line => {
@@ -102,7 +93,6 @@ const Inventory: React.FC<InventoryProps> = ({
         }));
         onSave([...ingredients, ...newItems]);
       } else {
-        // Expected Menu CSV: Name, Category, Full Price, Half Price, Quarter Price, Description
         const newItems: MenuItem[] = rows.slice(1).filter(r => r[0]).map(parts => ({
           id: `m-bulk-${Math.random().toString(36).substr(2, 9)}`,
           name: parts[0],
@@ -244,7 +234,6 @@ const Inventory: React.FC<InventoryProps> = ({
     };
     onAddMenuItem(newItem);
     setShowAddMenuModal(false);
-    // Reset form
     setMenuName(''); setMenuFullPrice(''); setMenuHalfPrice(''); setMenuQuarterPrice(''); setMenuDescription('');
   };
 
@@ -254,46 +243,45 @@ const Inventory: React.FC<InventoryProps> = ({
   return (
     <div className="h-full flex flex-col space-y-4">
       {/* View Switcher & Actions */}
-      <div className="bg-white p-4 rounded-xl shadow-sm border border-slate-200 flex flex-wrap justify-between items-center gap-4">
+      <div className="bg-white p-4 rounded-xl shadow-sm border border-slate-200 flex flex-col md:flex-row justify-between items-stretch md:items-center gap-4">
         <div className="flex bg-slate-100 p-1 rounded-lg">
-          <button onClick={() => setActiveView('menu')} className={`px-4 py-2 rounded-md text-sm font-bold transition-all ${activeView === 'menu' ? 'bg-white shadow text-blue-600' : 'text-slate-500'}`}>Menu Analytics</button>
-          <button onClick={() => setActiveView('stock')} className={`px-4 py-2 rounded-md text-sm font-bold transition-all ${activeView === 'stock' ? 'bg-white shadow text-blue-600' : 'text-slate-500'}`}>Inventory Stock</button>
+          <button onClick={() => setActiveView('menu')} className={`flex-1 md:flex-none px-4 py-2 rounded-md text-sm font-bold transition-all ${activeView === 'menu' ? 'bg-white shadow text-blue-600' : 'text-slate-500'}`}>Menu Analytics</button>
+          <button onClick={() => setActiveView('stock')} className={`flex-1 md:flex-none px-4 py-2 rounded-md text-sm font-bold transition-all ${activeView === 'stock' ? 'bg-white shadow text-blue-600' : 'text-slate-500'}`}>Inventory Stock</button>
         </div>
 
-        <div className="flex items-center gap-2">
+        <div className="flex flex-col md:flex-row items-stretch md:items-center gap-3">
           <div className="relative">
             <Search className="absolute left-3 top-2.5 text-slate-400" size={16} />
-            <input type="text" placeholder="Search catalog..." value={searchTerm} onChange={e => setSearchTerm(e.target.value)} className="pl-9 pr-4 py-2 border rounded-lg text-sm focus:ring-2 focus:ring-blue-500 outline-none" />
+            <input type="text" placeholder="Search catalog..." value={searchTerm} onChange={e => setSearchTerm(e.target.value)} className="w-full pl-9 pr-4 py-2 border rounded-lg text-sm focus:ring-2 focus:ring-blue-500 outline-none" />
           </div>
           
-          <div className="flex border-l pl-2 gap-2">
-            <button onClick={() => (activeView === 'menu' ? menuFileInputRef : fileInputRef).current?.click()} className="p-2 border border-slate-200 rounded-lg text-slate-600 hover:bg-slate-50" title="Upload CSV">
+          <div className="flex gap-2 justify-center md:border-l md:pl-2">
+            <button onClick={() => (activeView === 'menu' ? menuFileInputRef : fileInputRef).current?.click()} className="flex-1 md:flex-none p-2 border border-slate-200 rounded-lg text-slate-600 hover:bg-slate-50 flex justify-center items-center" title="Upload CSV">
                 <FileSpreadsheet size={18} />
             </button>
             {activeView === 'menu' && (
                 <>
-                    <button onClick={downloadMenuCSV} className="p-2 border border-slate-200 rounded-lg text-slate-600 hover:bg-slate-50" title="Download Menu CSV">
+                    <button onClick={downloadMenuCSV} className="flex-1 md:flex-none p-2 border border-slate-200 rounded-lg text-slate-600 hover:bg-slate-50 flex justify-center items-center" title="Download Menu CSV">
                         <Download size={18} />
                     </button>
                     {selectedMenuIds.size > 0 && (
-                        <button onClick={handleBulkDelete} className="p-2 border border-red-100 bg-red-50 text-red-600 rounded-lg hover:bg-red-100" title="Delete Selected">
+                        <button onClick={handleBulkDelete} className="flex-1 md:flex-none p-2 border border-red-100 bg-red-50 text-red-600 rounded-lg hover:bg-red-100 flex justify-center items-center" title="Delete Selected">
                             <Trash size={18} />
                         </button>
                     )}
                 </>
             )}
+            <button onClick={() => activeView === 'menu' ? setShowAddMenuModal(true) : setShowAddIngModal(true)} className="flex-[2] md:flex-none bg-blue-600 text-white px-4 py-2 rounded-lg text-sm font-bold flex items-center justify-center gap-2">
+                <Plus size={18} /> <span className="md:inline">Add</span>
+            </button>
           </div>
-
-          <button onClick={() => activeView === 'menu' ? setShowAddMenuModal(true) : setShowAddIngModal(true)} className="bg-blue-600 text-white px-4 py-2 rounded-lg text-sm font-bold flex items-center gap-2 ml-2">
-            <Plus size={18} /> Add {activeView === 'menu' ? 'Item' : 'Ingredient'}
-          </button>
         </div>
       </div>
 
       {activeView === 'menu' ? (
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 flex-1 overflow-hidden">
-          {/* Left Panel: Menu List */}
-          <div className="bg-white rounded-xl border border-slate-200 flex flex-col overflow-hidden">
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 flex-1 overflow-hidden relative">
+          {/* Left Panel: Menu List (Hidden on mobile if item is selected) */}
+          <div className={`${selectedItem ? 'hidden lg:flex' : 'flex'} bg-white rounded-xl border border-slate-200 flex-col overflow-hidden`}>
             <div className="p-4 border-b border-slate-100 bg-slate-50 font-bold text-slate-700 flex justify-between items-center">
                 <span>Menu Catalog ({filteredMenuItems.length})</span>
                 {selectedMenuIds.size > 0 && <span className="text-xs bg-red-100 text-red-600 px-2 py-0.5 rounded-full">{selectedMenuIds.size} Selected</span>}
@@ -312,31 +300,31 @@ const Inventory: React.FC<InventoryProps> = ({
                         </div>
                         <div>
                           <div className="flex items-center gap-2">
-                            <h3 className="font-bold text-slate-800">{item.name}</h3>
-                            {!item.available && <span className="text-[10px] bg-red-100 text-red-600 px-1.5 py-0.5 rounded font-black uppercase">Sold Out</span>}
+                            <h3 className="font-bold text-slate-800 text-sm md:text-base">{item.name}</h3>
+                            {!item.available && <span className="text-[8px] md:text-[10px] bg-red-100 text-red-600 px-1.5 py-0.5 rounded font-black uppercase">Sold Out</span>}
                           </div>
-                          <p className="text-xs text-slate-500">{item.category}</p>
+                          <p className="text-[10px] md:text-xs text-slate-500">{item.category}</p>
                         </div>
                       </div>
                       <div className="flex flex-col items-end">
-                        <span className="font-black text-slate-900">₹{Number(item.price).toFixed(0)}</span>
+                        <span className="font-black text-slate-900 text-sm md:text-base">₹{Number(item.price).toFixed(0)}</span>
                         <button onClick={(e) => handleSingleDelete(item.id, e)} className="mt-2 p-1.5 text-slate-300 hover:text-red-500 hover:bg-red-50 rounded transition-colors">
                             <Trash2 size={14} />
                         </button>
                       </div>
                     </div>
-                    <div className="grid grid-cols-3 gap-2 mt-3 text-center ml-8">
-                       <div className="bg-slate-50 p-1.5 rounded border border-slate-100">
-                          <p className="text-[9px] text-slate-400 uppercase font-bold">Cost</p>
-                          <p className="text-xs font-bold text-slate-700">₹{cost.toFixed(0)}</p>
+                    <div className="grid grid-cols-3 gap-1 md:gap-2 mt-3 text-center ml-8">
+                       <div className="bg-slate-50 p-1 md:p-1.5 rounded border border-slate-100">
+                          <p className="text-[8px] md:text-[9px] text-slate-400 uppercase font-bold">Cost</p>
+                          <p className="text-[10px] md:text-xs font-bold text-slate-700">₹{cost.toFixed(0)}</p>
                        </div>
-                       <div className="bg-slate-50 p-1.5 rounded border border-slate-100">
-                          <p className="text-[9px] text-slate-400 uppercase font-bold">Profit</p>
-                          <p className="text-xs font-bold text-green-600">₹{(item.price - cost).toFixed(0)}</p>
+                       <div className="bg-slate-50 p-1 md:p-1.5 rounded border border-slate-100">
+                          <p className="text-[8px] md:text-[9px] text-slate-400 uppercase font-bold">Profit</p>
+                          <p className="text-[10px] md:text-xs font-bold text-green-600">₹{(item.price - cost).toFixed(0)}</p>
                        </div>
-                       <div className="bg-slate-50 p-1.5 rounded border border-slate-100">
-                          <p className="text-[9px] text-slate-400 uppercase font-bold">Margin</p>
-                          <p className={`text-xs font-bold ${margin < 65 ? 'text-orange-500' : 'text-blue-600'}`}>{margin.toFixed(0)}%</p>
+                       <div className="bg-slate-50 p-1 md:p-1.5 rounded border border-slate-100">
+                          <p className="text-[8px] md:text-[9px] text-slate-400 uppercase font-bold">Margin</p>
+                          <p className={`text-[10px] md:text-xs font-bold ${margin < 65 ? 'text-orange-500' : 'text-blue-600'}`}>{margin.toFixed(0)}%</p>
                        </div>
                     </div>
                   </div>
@@ -346,65 +334,68 @@ const Inventory: React.FC<InventoryProps> = ({
           </div>
 
           {/* Right Panel: Recipe & Controls */}
-          <div className="bg-white rounded-xl border border-slate-200 flex flex-col overflow-hidden">
+          <div className={`${!selectedItem ? 'hidden lg:flex' : 'flex'} bg-white rounded-xl border border-slate-200 flex-col overflow-hidden`}>
             {selectedItem ? (
               <div className="flex flex-col h-full">
-                <div className="p-6 border-b border-slate-100 flex justify-between items-center">
-                  <div>
-                    <h2 className="text-2xl font-black text-slate-800">{selectedItem.name}</h2>
-                    <p className="text-slate-500">Recipe & Costing Analysis</p>
+                <div className="p-4 md:p-6 border-b border-slate-100 flex justify-between items-center bg-slate-50/30">
+                  <div className="flex items-center gap-2">
+                    <button onClick={() => setSelectedItem(null)} className="lg:hidden p-1 text-slate-400"><ChevronLeft size={24}/></button>
+                    <div>
+                        <h2 className="text-xl md:text-2xl font-black text-slate-800 leading-tight">{selectedItem.name}</h2>
+                        <p className="text-xs text-slate-500">Recipe & Costing Analysis</p>
+                    </div>
                   </div>
                   <button 
                     onClick={() => toggleItemAvailability(selectedItem)}
-                    className={`flex items-center gap-2 px-4 py-2 rounded-lg font-bold text-sm transition-colors ${selectedItem.available ? 'bg-red-50 text-red-600 hover:bg-red-100' : 'bg-green-50 text-green-600 hover:bg-green-100'}`}
+                    className={`flex items-center gap-2 px-3 py-1.5 md:px-4 md:py-2 rounded-lg font-bold text-[10px] md:text-sm transition-colors ${selectedItem.available ? 'bg-red-50 text-red-600 hover:bg-red-100' : 'bg-green-50 text-green-600 hover:bg-green-100'}`}
                   >
-                    {selectedItem.available ? <Ban size={16}/> : <Check size={16}/>}
-                    {selectedItem.available ? 'Mark Out' : 'Mark In'}
+                    {selectedItem.available ? <Ban size={14}/> : <Check size={14}/>}
+                    {selectedItem.available ? 'Out' : 'In'}
                   </button>
                 </div>
                 
-                <div className="flex-1 overflow-y-auto p-6 space-y-6">
+                <div className="flex-1 overflow-y-auto p-4 md:p-6 space-y-6">
                   {/* Portion Overview */}
                   <div className="bg-slate-50 rounded-xl p-4 border border-slate-100">
-                    <h4 className="text-xs font-black text-slate-400 uppercase tracking-widest mb-3">Portion Pricing</h4>
-                    <div className="grid grid-cols-3 gap-4">
+                    <h4 className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-3">Portion Pricing</h4>
+                    <div className="grid grid-cols-3 gap-2 md:gap-4">
                         <div className="text-center">
-                            <p className="text-[10px] text-slate-500 uppercase">Full</p>
-                            <p className="font-black text-slate-800">₹{selectedItem.portionPrices?.full || selectedItem.price}</p>
+                            <p className="text-[8px] md:text-[10px] text-slate-500 uppercase">Full</p>
+                            <p className="font-black text-slate-800 text-sm md:text-base">₹{selectedItem.portionPrices?.full || selectedItem.price}</p>
                         </div>
                         <div className="text-center border-x border-slate-200">
-                            <p className="text-[10px] text-slate-500 uppercase">Half</p>
-                            <p className="font-black text-slate-800">{selectedItem.portionPrices?.half ? `₹${selectedItem.portionPrices.half}` : '-'}</p>
+                            <p className="text-[8px] md:text-[10px] text-slate-500 uppercase">Half</p>
+                            <p className="font-black text-slate-800 text-sm md:text-base">{selectedItem.portionPrices?.half ? `₹${selectedItem.portionPrices.half}` : '-'}</p>
                         </div>
                         <div className="text-center">
-                            <p className="text-[10px] text-slate-500 uppercase">Quarter</p>
-                            <p className="font-black text-slate-800">{selectedItem.portionPrices?.quarter ? `₹${selectedItem.portionPrices.quarter}` : '-'}</p>
+                            <p className="text-[8px] md:text-[10px] text-slate-500 uppercase">Quarter</p>
+                            <p className="font-black text-slate-800 text-sm md:text-base">{selectedItem.portionPrices?.quarter ? `₹${selectedItem.portionPrices.quarter}` : '-'}</p>
                         </div>
                     </div>
                   </div>
 
                   {/* Current Ingredients */}
                   <div>
-                    <h4 className="text-xs font-black text-slate-400 uppercase tracking-widest mb-4">Mapped Ingredients</h4>
+                    <h4 className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-3">Recipe Components</h4>
                     <div className="space-y-2">
                       {selectedItem.ingredients.length === 0 ? (
-                        <div className="bg-slate-50 p-6 rounded-xl text-center text-slate-400 border border-dashed border-slate-200">
-                          No ingredients mapped to this recipe yet.
+                        <div className="bg-slate-50 p-6 rounded-xl text-center text-xs text-slate-400 border border-dashed border-slate-200">
+                          No ingredients mapped yet.
                         </div>
                       ) : (
                         selectedItem.ingredients.map(ref => {
                           const ing = ingredients.find(i => i.id === ref.ingredientId);
                           return (
                             <div key={ref.ingredientId} className="flex justify-between items-center bg-white p-3 border border-slate-100 rounded-lg shadow-sm">
-                              <div className="flex items-center gap-3">
-                                <div className="p-2 bg-slate-50 rounded text-slate-500"><Package size={16}/></div>
+                              <div className="flex items-center gap-2 md:gap-3">
+                                <div className="p-1.5 md:p-2 bg-slate-50 rounded text-slate-500"><Package size={14}/></div>
                                 <div>
-                                  <p className="font-bold text-slate-800 text-sm">{ing?.name || 'Unknown'}</p>
-                                  <p className="text-xs text-slate-500">{ref.quantity} {ing?.unit}</p>
+                                  <p className="font-bold text-slate-800 text-xs md:text-sm">{ing?.name || 'Unknown'}</p>
+                                  <p className="text-[10px] text-slate-500">{ref.quantity} {ing?.unit}</p>
                                 </div>
                               </div>
-                              <div className="flex items-center gap-4">
-                                <span className="font-mono text-sm text-slate-600 font-bold">₹{(Number(ing?.unitCost || 0) * ref.quantity).toFixed(2)}</span>
+                              <div className="flex items-center gap-3 md:gap-4">
+                                <span className="font-mono text-xs text-slate-600 font-bold">₹{(Number(ing?.unitCost || 0) * ref.quantity).toFixed(2)}</span>
                                 <button onClick={() => removeIngredientFromRecipe(ref.ingredientId)} className="text-slate-300 hover:text-red-500"><Trash2 size={16}/></button>
                               </div>
                             </div>
@@ -416,21 +407,21 @@ const Inventory: React.FC<InventoryProps> = ({
 
                   {/* Add to Recipe */}
                   <div className="bg-blue-50 p-4 rounded-xl border border-blue-100">
-                    <h4 className="text-xs font-black text-blue-400 uppercase tracking-widest mb-3">Add Ingredient</h4>
-                    <div className="flex gap-2">
-                      <select value={recipeIngId} onChange={e => setRecipeIngId(e.target.value)} className="flex-1 bg-white border border-blue-200 rounded-lg px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-blue-500">
+                    <h4 className="text-[10px] font-black text-blue-400 uppercase tracking-widest mb-3">Map Component</h4>
+                    <div className="flex flex-wrap gap-2">
+                      <select value={recipeIngId} onChange={e => setRecipeIngId(e.target.value)} className="flex-1 min-w-[150px] bg-white border border-blue-200 rounded-lg px-3 py-2 text-xs md:text-sm outline-none focus:ring-2 focus:ring-blue-500">
                         <option value="">Select Ingredient...</option>
-                        {ingredients.map(i => <option key={i.id} value={i.id}>{i.name} (per {i.unit})</option>)}
+                        {ingredients.map(i => <option key={i.id} value={i.id}>{i.name} ({i.unit})</option>)}
                       </select>
-                      <input type="number" placeholder="Qty" value={recipeQty} onChange={e => setRecipeQty(e.target.value)} className="w-20 bg-white border border-blue-200 rounded-lg px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-blue-500" />
-                      <button onClick={addIngredientToRecipe} className="bg-blue-600 text-white p-2 rounded-lg hover:bg-blue-700 shadow-md transition-all active:scale-95"><Plus size={20}/></button>
+                      <input type="number" placeholder="Qty" value={recipeQty} onChange={e => setRecipeQty(e.target.value)} className="w-16 md:w-20 bg-white border border-blue-200 rounded-lg px-3 py-2 text-xs md:text-sm outline-none focus:ring-2 focus:ring-blue-500" />
+                      <button onClick={addIngredientToRecipe} className="bg-blue-600 text-white p-2 rounded-lg hover:bg-blue-700 shadow-md transition-all active:scale-95 flex items-center justify-center"><Plus size={20}/></button>
                     </div>
                   </div>
                 </div>
 
-                <div className="p-6 bg-slate-50 border-t border-slate-100">
-                  <div className="flex justify-between items-center text-lg">
-                    <span className="font-bold text-slate-600">Total Production Cost</span>
+                <div className="p-4 md:p-6 bg-slate-50 border-t border-slate-100 mt-auto">
+                  <div className="flex justify-between items-center text-base md:text-lg">
+                    <span className="font-bold text-slate-600 text-sm md:text-base">Production Cost</span>
                     <span className="font-black text-slate-900">₹{calculatePlateCost(selectedItem).toFixed(2)}</span>
                   </div>
                 </div>
@@ -438,44 +429,46 @@ const Inventory: React.FC<InventoryProps> = ({
             ) : (
               <div className="h-full flex flex-col items-center justify-center text-slate-400 p-12 text-center">
                 <ShoppingBag size={64} className="mb-4 opacity-10" />
-                <h3 className="text-xl font-bold text-slate-500">No Item Selected</h3>
-                <p>Select a dish from the catalog to manage its recipe and analyze margins.</p>
+                <h3 className="text-lg md:text-xl font-bold text-slate-500">No Item Selected</h3>
+                <p className="text-xs md:text-sm">Choose a dish to manage ingredients.</p>
               </div>
             )}
           </div>
         </div>
       ) : (
-        <div className="bg-white rounded-xl border border-slate-200 flex flex-col overflow-hidden flex-1">
-          <div className="overflow-x-auto">
-            <table className="w-full text-left">
+        <div className="bg-white rounded-xl border border-slate-200 flex flex-col overflow-hidden flex-1 shadow-sm">
+          <div className="overflow-x-auto no-scrollbar">
+            <table className="w-full text-left min-w-[600px]">
               <thead className="bg-slate-50 border-b border-slate-200">
                 <tr>
-                  <th className="px-6 py-4 font-bold text-slate-600 text-sm">Ingredient</th>
-                  <th className="px-6 py-4 font-bold text-slate-600 text-sm">Unit</th>
-                  <th className="px-6 py-4 font-bold text-slate-600 text-sm">Unit Cost</th>
-                  <th className="px-6 py-4 font-bold text-slate-600 text-sm">Stock Level</th>
-                  <th className="px-6 py-4 font-bold text-slate-600 text-sm text-right">Actions</th>
+                  <th className="px-4 md:px-6 py-4 font-bold text-slate-600 text-[10px] md:text-sm uppercase tracking-wider">Ingredient</th>
+                  <th className="px-4 md:px-6 py-4 font-bold text-slate-600 text-[10px] md:text-sm uppercase tracking-wider">Unit</th>
+                  <th className="px-4 md:px-6 py-4 font-bold text-slate-600 text-[10px] md:text-sm uppercase tracking-wider">Unit Cost</th>
+                  <th className="px-4 md:px-6 py-4 font-bold text-slate-600 text-[10px] md:text-sm uppercase tracking-wider">Stock Level</th>
+                  <th className="px-4 md:px-6 py-4 font-bold text-slate-600 text-[10px] md:text-sm uppercase tracking-wider text-right">Actions</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100">
                 {filteredIngredients.map(ing => (
-                  <tr key={ing.id} className="hover:bg-slate-50 group">
-                    <td className="px-6 py-4">
+                  <tr key={ing.id} className="hover:bg-slate-50 group transition-colors">
+                    <td className="px-4 md:px-6 py-3 md:py-4">
                       <div className="flex items-center gap-3">
-                        <div className="p-2 bg-slate-100 rounded text-slate-500"><Package size={18}/></div>
-                        <span className="font-bold text-slate-800">{ing.name}</span>
+                        <div className="p-1.5 md:p-2 bg-slate-100 rounded text-slate-500"><Package size={16}/></div>
+                        <span className="font-bold text-slate-800 text-xs md:text-sm">{ing.name}</span>
                       </div>
                     </td>
-                    <td className="px-6 py-4 text-slate-500">{ing.unit}</td>
-                    <td className="px-6 py-4 font-mono font-bold">₹{Number(ing.unitCost).toFixed(2)}</td>
-                    <td className="px-6 py-4">
+                    <td className="px-4 md:px-6 py-3 md:py-4 text-xs md:text-sm text-slate-500">{ing.unit}</td>
+                    <td className="px-4 md:px-6 py-3 md:py-4 font-mono font-bold text-xs md:text-sm text-slate-900">₹{Number(ing.unitCost).toFixed(2)}</td>
+                    <td className="px-4 md:px-6 py-3 md:py-4">
                       <div className="flex items-center gap-2">
                         <span className={`w-2 h-2 rounded-full ${ing.stockQuantity < 10 ? 'bg-red-500 animate-pulse' : 'bg-green-500'}`}></span>
-                        <span className="font-medium">{ing.stockQuantity} {ing.unit}</span>
+                        <span className="font-medium text-xs md:text-sm">{ing.stockQuantity} {ing.unit}</span>
                       </div>
                     </td>
-                    <td className="px-6 py-4 text-right">
-                       <button onClick={() => onDeleteIngredient(ing.id)} className="p-2 text-slate-300 hover:text-red-500 transition-colors opacity-0 group-hover:opacity-100"><Trash2 size={18}/></button>
+                    <td className="px-4 md:px-6 py-3 md:py-4 text-right">
+                       <button onClick={() => onDeleteIngredient(ing.id)} className="p-2 text-slate-300 hover:text-red-500 transition-colors">
+                           <Trash2 size={16}/>
+                       </button>
                     </td>
                   </tr>
                 ))}
@@ -491,7 +484,7 @@ const Inventory: React.FC<InventoryProps> = ({
 
       {/* ADD ITEM MODAL */}
       {showAddMenuModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4">
+        <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/60 backdrop-blur-sm p-4">
            <div className="bg-white rounded-2xl shadow-2xl w-full max-w-lg p-6 animate-in zoom-in-95 max-h-[95vh] overflow-y-auto">
               <div className="flex justify-between items-center mb-6">
                 <h3 className="text-xl font-black">Add New Dish</h3>
@@ -524,22 +517,22 @@ const Inventory: React.FC<InventoryProps> = ({
                     <h4 className="text-[10px] font-black uppercase text-slate-400 tracking-widest">Optional Portion Pricing</h4>
                     <div className="grid grid-cols-2 gap-4">
                         <div>
-                            <label className="block text-xs font-bold text-slate-500 mb-1">Half Portion Price</label>
-                            <input type="number" step="0.01" value={menuHalfPrice} onChange={e => setMenuHalfPrice(e.target.value)} className="w-full px-4 py-2 border rounded-xl bg-white" placeholder="Leave empty if N/A" />
+                            <label className="block text-xs font-bold text-slate-500 mb-1">Half Price</label>
+                            <input type="number" step="0.01" value={menuHalfPrice} onChange={e => setMenuHalfPrice(e.target.value)} className="w-full px-4 py-2 border rounded-xl bg-white" placeholder="N/A" />
                         </div>
                         <div>
-                            <label className="block text-xs font-bold text-slate-500 mb-1">Quarter Portion Price</label>
-                            <input type="number" step="0.01" value={menuQuarterPrice} onChange={e => setMenuQuarterPrice(e.target.value)} className="w-full px-4 py-2 border rounded-xl bg-white" placeholder="Leave empty if N/A" />
+                            <label className="block text-xs font-bold text-slate-500 mb-1">Quarter Price</label>
+                            <input type="number" step="0.01" value={menuQuarterPrice} onChange={e => setMenuQuarterPrice(e.target.value)} className="w-full px-4 py-2 border rounded-xl bg-white" placeholder="N/A" />
                         </div>
                     </div>
                  </div>
 
                  <div>
                     <label className="block text-xs font-black uppercase text-slate-400 mb-1">Short Description</label>
-                    <textarea value={menuDescription} onChange={e => setMenuDescription(e.target.value)} className="w-full px-4 py-2 border rounded-xl h-20 resize-none" placeholder="Ingredients summary or notes..."></textarea>
+                    <textarea value={menuDescription} onChange={e => setMenuDescription(e.target.value)} className="w-full px-4 py-2 border rounded-xl h-20 resize-none text-sm" placeholder="Ingredients summary..."></textarea>
                  </div>
 
-                 <button type="submit" className="w-full py-4 bg-blue-600 text-white font-black rounded-2xl shadow-lg shadow-blue-200 hover:bg-blue-700 transition-all">Save Dish to Menu</button>
+                 <button type="submit" className="w-full py-4 bg-blue-600 text-white font-black rounded-2xl shadow-lg shadow-blue-200 hover:bg-blue-700 transition-all text-sm uppercase">Save Dish to Menu</button>
               </form>
            </div>
         </div>
@@ -547,7 +540,7 @@ const Inventory: React.FC<InventoryProps> = ({
 
       {/* ADD INGREDIENT MODAL */}
       {showAddIngModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4">
+        <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/60 backdrop-blur-sm p-4">
            <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md p-6 animate-in zoom-in-95">
               <div className="flex justify-between items-center mb-6">
                 <h3 className="text-xl font-black">Add Raw Material</h3>
@@ -556,23 +549,23 @@ const Inventory: React.FC<InventoryProps> = ({
               <form onSubmit={handleAddIngredient} className="space-y-4">
                  <div>
                     <label className="block text-xs font-black uppercase text-slate-400 mb-1">Ingredient Name</label>
-                    <input autoFocus type="text" value={ingName} onChange={e => setIngName(e.target.value)} required className="w-full px-4 py-2 border rounded-xl" placeholder="e.g. Basmati Rice" />
+                    <input autoFocus type="text" value={ingName} onChange={e => setIngName(e.target.value)} required className="w-full px-4 py-2 border rounded-xl font-bold" placeholder="e.g. Basmati Rice" />
                  </div>
                  <div className="grid grid-cols-3 gap-3">
                     <div>
                       <label className="block text-xs font-black uppercase text-slate-400 mb-1">Unit</label>
-                      <input type="text" value={ingUnit} onChange={e => setIngUnit(e.target.value)} required className="w-full px-3 py-2 border rounded-xl" placeholder="kg" />
+                      <input type="text" value={ingUnit} onChange={e => setIngUnit(e.target.value)} required className="w-full px-3 py-2 border rounded-xl text-sm" placeholder="kg" />
                     </div>
                     <div>
-                      <label className="block text-xs font-black uppercase text-slate-400 mb-1">Cost / Unit</label>
-                      <input type="number" step="0.01" value={ingCost} onChange={e => setIngCost(e.target.value)} required className="w-full px-3 py-2 border rounded-xl" placeholder="0.00" />
+                      <label className="block text-xs font-black uppercase text-slate-400 mb-1">Cost</label>
+                      <input type="number" step="0.01" value={ingCost} onChange={e => setIngCost(e.target.value)} required className="w-full px-3 py-2 border rounded-xl text-sm" placeholder="0.00" />
                     </div>
                     <div>
                       <label className="block text-xs font-black uppercase text-slate-400 mb-1">Stock</label>
-                      <input type="number" step="0.1" value={ingStock} onChange={e => setIngStock(e.target.value)} required className="w-full px-3 py-2 border rounded-xl" placeholder="0" />
+                      <input type="number" step="0.1" value={ingStock} onChange={e => setIngStock(e.target.value)} required className="w-full px-3 py-2 border rounded-xl text-sm" placeholder="0" />
                     </div>
                  </div>
-                 <button type="submit" className="w-full py-4 bg-blue-600 text-white font-black rounded-2xl shadow-lg shadow-blue-200">Register Ingredient</button>
+                 <button type="submit" className="w-full py-4 bg-blue-600 text-white font-black rounded-2xl shadow-lg shadow-blue-200 text-sm uppercase">Register Ingredient</button>
               </form>
            </div>
         </div>
