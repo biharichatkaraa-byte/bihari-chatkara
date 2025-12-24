@@ -214,8 +214,8 @@ api.get('/orders', async (req, res) => {
             const itemsMap = {};
             allItems.forEach(item => {
                 const p = parseRow(item, ['modifiers']);
-                if (!itemsMap[p.order_id]) itemsMap[p.order_id] = [];
-                itemsMap[p.order_id].push(p);
+                if (!itemsMap[p.orderId]) itemsMap[p.orderId] = [];
+                itemsMap[p.orderId].push(p);
             });
             result.forEach(order => order.items = itemsMap[order.id] || []);
         }

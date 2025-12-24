@@ -185,7 +185,7 @@ const Settings: React.FC = () => {
           </div>
           
           <div className="flex justify-between mb-2">
-             <span>Date: {format(new Date(), 'dd/MM/yy HH:mm')}</span>
+             <span>Date: {format(new Date(), 'dd-MM-yyyy hh:mm a')}</span>
              <span>By: Admin</span>
           </div>
 

@@ -246,7 +246,7 @@ const POS: React.FC<POSProps> = ({ orders, menuItems, onPlaceOrder, onUpdateOrde
           
           {appSettings.showOrderDateTime && (
               <div className="flex justify-between mb-2">
-                 <span>Date: {lastCompletedOrder && format(new Date(lastCompletedOrder.createdAt), 'dd/MM/yy HH:mm')}</span>
+                 <span>Date: {lastCompletedOrder && format(new Date(lastCompletedOrder.createdAt), 'dd-MM-yyyy hh:mm a')}</span>
                  <span>By: {lastCompletedOrder?.serverName}</span>
               </div>
           )}

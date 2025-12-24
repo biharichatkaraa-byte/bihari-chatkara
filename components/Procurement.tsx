@@ -303,7 +303,7 @@ const Procurement: React.FC<ProcurementProps> = ({
                                                 </td>
                                                 <td className="px-6 py-4">
                                                     <p className="text-xs font-bold text-slate-700">{req.requestedBy}</p>
-                                                    <p className="text-[10px] text-slate-400 font-bold uppercase">{format(new Date(req.requestedAt), 'dd MMM, HH:mm')}</p>
+                                                    <p className="text-[10px] text-slate-400 font-bold uppercase">{format(new Date(req.requestedAt), 'dd-MM-yyyy hh:mm a')}</p>
                                                 </td>
                                                 <td className="px-6 py-4">
                                                     <span className={`px-2 py-0.5 rounded text-[10px] font-black uppercase ${req.urgency === 'HIGH' ? 'bg-red-100 text-red-600' : req.urgency === 'MEDIUM' ? 'bg-orange-100 text-orange-600' : 'bg-slate-100 text-slate-500'}`}>{req.urgency}</span>
@@ -437,7 +437,7 @@ const Procurement: React.FC<ProcurementProps> = ({
                                                 <td className="px-6 py-4 font-bold text-slate-800">{req.ingredientName}</td>
                                                 <td className="px-6 py-4 text-xs font-bold text-slate-500">{req.quantity} {req.unit}</td>
                                                 <td className="px-6 py-4">{getStatusBadge(req.status)}</td>
-                                                <td className="px-6 py-4 text-right text-[10px] font-bold text-slate-400">{format(new Date(req.requestedAt), 'MMM dd, HH:mm')}</td>
+                                                <td className="px-6 py-4 text-right text-[10px] font-bold text-slate-400">{format(new Date(req.requestedAt), 'dd-MM-yyyy hh:mm a')}</td>
                                             </tr>
                                         ))}
                                     </tbody>
